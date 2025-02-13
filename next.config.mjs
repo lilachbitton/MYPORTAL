@@ -1,7 +1,4 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: false,
-  transpilePackages: ['react-quill']
-};
+const nextConfig = {};
 
 export default nextConfig;
