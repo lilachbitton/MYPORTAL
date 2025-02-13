@@ -1,20 +1,20 @@
 // components/RichTextEditor.js
-import React, { useState } from 'react';
+import React from 'react';
 import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 // ייבוא דינמי של react-quill כדי למנוע בעיות SSR
-const ReactQuill = dynamic(() => import('react-quill'), { 
+const ReactQuill = dynamic(() => import('react-quill'), {
   ssr: false,
   loading: () => <div className="h-64 w-full bg-gray-100 animate-pulse" />
 });
 
 const modules = {
   toolbar: [
-    [{ 'header': [1, 2, 3, false] }],
+    [{ header: [1, 2, 3, false] }],
     ['bold', 'italic', 'underline', 'strike'],
-    [{ 'direction': 'rtl' }],
-    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ direction: 'rtl' }],
+    [{ list: 'ordered' }, { list: 'bullet' }],
     ['link', 'image'],
     ['clean']
   ],
@@ -28,9 +28,9 @@ const formats = [
   'direction'
 ];
 
-export const RichTextEditor = ({ 
-  value, 
-  onChange, 
+const RichTextEditor = ({
+  value,
+  onChange,
   readOnly = false,
   placeholder = 'התחל לכתוב כאן...'
 }) => {
@@ -49,3 +49,5 @@ export const RichTextEditor = ({
     </div>
   );
 };
+
+export default RichTextEditor;
