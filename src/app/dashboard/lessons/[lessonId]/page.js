@@ -134,7 +134,7 @@ const StudentLessonPage = () => {
   const isSubmitted = ['pending_review', 'review', 'completed'].includes(assignment?.status);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-right">
+    <div className="min-h-screen bg-gray-50 rtl">
       {showSuccessAlert && (
         <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50">
           {successMessage}
@@ -166,31 +166,15 @@ const StudentLessonPage = () => {
         </div>
 
         {/* הקלטת השיעור */}
-        {lesson.recordingLink && (
+        {lesson.zoomLink && (
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4 text-right">הקלטת השיעור</h2>
             <div className="aspect-w-16 aspect-h-9">
               <iframe
-                src={`https://www.youtube.com/embed/${extractYouTubeId(lesson.recordingLink)}`}
+                src={lesson.zoomLink}
                 className="w-full h-96"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
-              ></iframe>
-            </div>
-          </div>
-        )}
-
-        {/* מצגת */}
-        {lesson.presentationLink && (
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4 text-right">מצגת השיעור</h2>
-            <div className="aspect-w-16 aspect-h-9">
-              <iframe
-                src={`https://docs.google.com/presentation/d/${extractGoogleSlidesId(lesson.presentationLink)}/embed`}
-                className="w-full h-96"
-                allowFullScreen={true}
-                mozallowfullscreen="true"
-                webkitallowfullscreen="true"
               ></iframe>
             </div>
           </div>
@@ -253,20 +237,5 @@ const StudentLessonPage = () => {
     </div>
   );
 };
-
-// עזר פונקציות לחילוץ זיהויים
-function extractYouTubeId(url: string): string {
-  // חילוץ מזהה יוטיוב מ-URL שונים
-  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
-  const match = url.match(youtubeRegex);
-  return match ? match[1] : '';
-}
-
-function extractGoogleSlidesId(url: string): string {
-  // חילוץ מזהה מצגת של גוגל מ-URL
-  const googleSlidesRegex = /\/presentation\/d\/([a-zA-Z0-9_-]+)/;
-  const match = url.match(googleSlidesRegex);
-  return match ? match[1] : '';
-}
 
 export default StudentLessonPage;
