@@ -91,7 +91,7 @@ const StudentLessonPage = () => {
       if (!assignment?.id) return;
 
       await updateDoc(doc(db, "assignments", assignment.id), {
-        status: 'pending_review',
+        status: 'submitted',
         updatedAt: new Date().toISOString()
       });
 
@@ -99,7 +99,11 @@ const StudentLessonPage = () => {
       setShowSuccessAlert(true);
       setTimeout(() => setShowSuccessAlert(false), 3000);
       
-      await fetchLessonAndAssignment();
+      // עדכון מיידי של הסטטוס בממשק
+      setAssignment(prev => ({
+        ...prev,
+        status: 'submitted'
+      }));
 
     } catch (error) {
       console.error("שגיאה בהגשת המטלה:", error);
@@ -109,11 +113,11 @@ const StudentLessonPage = () => {
 
   const getStatusColor = (status) => {
     switch(status) {
-      case 'new': return 'bg-gray-100 text-gray-800 border border-gray-300';
+      case 'new': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
       case 'submitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
-      case 'feedback': return 'bg-yellow-100 text-yellow-800 border border-yellow-300';
-      case 'resubmitted': return 'bg-green-100 text-green-800 border border-green-300';
-      default: return 'bg-gray-100 text-gray-800 border border-gray-300';
+      case 'feedback': return 'bg-orange-100 text-orange-800 border border-orange-300';
+      case 'resubmitted': return 'bg-purple-100 text-purple-800 border border-purple-300';
+      default: return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
     }
   };
 
@@ -149,7 +153,7 @@ const StudentLessonPage = () => {
     return <div className="p-4 text-center">לא נמצא שיעור</div>;
   }
 
-  const isSubmitted = ['pending_review', 'review', 'completed'].includes(assignment?.status);
+  const isSubmitted = ['submitted', 'feedback', 'resubmitted'].includes(assignment?.status);
 
   return (
     <div className="min-h-screen rtl bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
@@ -239,7 +243,8 @@ const StudentLessonPage = () => {
                 content={assignment.content?.studentContent || assignment.content?.template || ''}
                 onChange={handleSaveContent}
                 readOnly={isSubmitted}
-                className="min-h-[300px] text-right bg-gray-50 rounded-xl p-6 shadow-inner"
+                className="min-h-[300px] bg-gray-50 rounded-xl p-6 shadow-inner" 
+              style={{ direction: 'rtl' }}
               />
             </div>
 
