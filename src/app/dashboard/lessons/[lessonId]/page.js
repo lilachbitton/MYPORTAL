@@ -112,21 +112,27 @@ const StudentLessonPage = () => {
 
   const getStatusColor = (status) => {
     switch(status) {
-      case 'new': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+      case 'pending': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
       case 'submitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
-      case 'feedback': return 'bg-orange-100 text-orange-800 border border-orange-300';
-      case 'resubmitted': return 'bg-purple-100 text-purple-800 border border-purple-300';
+      case 'review': return 'bg-purple-100 text-purple-800 border border-purple-300';
+      case 'completed': return 'bg-orange-100 text-orange-800 border border-orange-300';
+      case 'revision': return 'bg-orange-100 text-orange-800 border border-orange-300';
+      case 'resubmitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
       default: return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+    }
     }
   };
 
   const getStatusText = (status) => {
     switch(status) {
-      case 'new': return 'חדש';
+      case 'pending': return 'חדש';
       case 'submitted': return 'הוגש לבדיקה';
-      case 'feedback': return 'לאחר משוב';
+      case 'review': return 'בבדיקה';
+      case 'completed': return 'לאחר משוב';
+      case 'revision': return 'לאחר משוב';
       case 'resubmitted': return 'נשלח לבדיקה מחדש';
       default: return 'חדש';
+    }
     }
   };
 
@@ -152,7 +158,7 @@ const StudentLessonPage = () => {
     return <div className="p-4 text-center">לא נמצא שיעור</div>;
   }
 
-  const isSubmitted = ['submitted', 'feedback', 'resubmitted'].includes(assignment?.status);
+  const isSubmitted = ['submitted', 'review', 'completed', 'revision', 'resubmitted'].includes(assignment?.status);
 
   return (
     <div className="min-h-screen rtl bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
