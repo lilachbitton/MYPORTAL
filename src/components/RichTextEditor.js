@@ -1,5 +1,5 @@
 // components/RichTextEditor.js
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
@@ -34,6 +34,17 @@ const RichTextEditor = ({
   readOnly = false,
   placeholder = 'התחל לכתוב כאן...'
 }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // לאחר שהקומפוננטה נטענה בצד הלקוח
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
   return (
     <div className="bg-white" dir="rtl">
       <ReactQuill
