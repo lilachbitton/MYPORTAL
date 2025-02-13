@@ -71,7 +71,7 @@ const StudentLessonPage = () => {
       if (!assignment?.id) return;
 
       await updateDoc(doc(db, "assignments", assignment.id), {
-        'content.studentContent': newContent,
+        'content.studentContent': encodeURIComponent(newContent),
         status: 'draft',
         updatedAt: new Date().toISOString()
       });
