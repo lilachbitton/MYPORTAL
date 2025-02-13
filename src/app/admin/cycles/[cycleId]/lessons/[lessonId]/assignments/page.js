@@ -26,6 +26,8 @@ const AssignmentsPage = () => {
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [error, setError] = useState(null);
+  const [showResponseModal, setShowResponseModal] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
 
   useEffect(() => {
     if (lessonId && cycleId) {
@@ -53,7 +55,8 @@ const AssignmentsPage = () => {
       setLoading(false);
     }
   };
-const fetchAssignments = async (lessonData) => {
+
+  const fetchAssignments = async (lessonData) => {
     try {
       // קבלת כל התלמידים במחזור
       const studentsQuery = query(
@@ -158,7 +161,8 @@ const fetchAssignments = async (lessonData) => {
       setError('שגיאה בטעינת מטלות התלמידים');
     }
   };
-const updateAssignmentStatus = async (assignmentId, newStatus) => {
+
+  const updateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
       setLoading(true);
       setError(null);
@@ -270,7 +274,8 @@ const updateAssignmentStatus = async (assignmentId, newStatus) => {
       return aValue < bValue ? 1 : -1;
     });
   };
-// Render component
+
+  // Render component
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -319,7 +324,7 @@ const updateAssignmentStatus = async (assignmentId, newStatus) => {
             {lesson.assignment.content?.template && (
               <div className="mt-4">
                 <h3 className="text-md font-semibold mb-2">תוכן המטלה:</h3>
-                <div className="bg-white p-4 rounded border">
+                <div className="bg-white p-4 rounded border max-h-40 overflow-y-auto">
                   <SimpleEditor
                     content={lesson.assignment.content.template}
                     readOnly={true}
@@ -413,8 +418,8 @@ const updateAssignmentStatus = async (assignmentId, newStatus) => {
                     {assignment.content?.studentContent && (
                       <button
                         onClick={() => {
-                          // כאן אפשר להוסיף לוגיקה לפתיחת מודל או ניווט לדף צפייה בתשובה
-                          alert('צפייה בתשובת התלמיד - יש להוסיף מודל או ניווט');
+                          setSelectedAssignment(assignment);
+                          setShowResponseModal(true);
                         }}
                         className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:border-blue-700 focus:shadow-outline-blue active:bg-blue-800 transition duration-150 ease-in-out ml-2"
                       >
@@ -441,6 +446,71 @@ const updateAssignmentStatus = async (assignmentId, newStatus) => {
       {assignments.length === 0 && (
         <div className="text-center py-8 text-gray-500">
           לא נמצאו תלמידים במחזור זה
+        </div>
+      )}
+
+      {/* מודל להצגת תשובת התלמיד */}
+      {showResponseModal && selectedAssignment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">
+                תשובת התלמיד: {selectedAssignment.student?.fullName}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowResponseModal(false);
+                  setSelectedAssignment(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-bold mb-2">המשימה המקורית:</h3>
+                <div className="bg-gray-50 p-4 rounded border max-h-60 overflow-y-auto">
+                  <SimpleEditor
+                    content={selectedAssignment.content.template}
+                    readOnly={true}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-bold mb-2">תשובת התלמיד:</h3>
+                <div className="bg-white p-4 rounded border">
+                  <SimpleEditor
+                    content={selectedAssignment.content.studentContent}
+                    readOnly={true}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center mt-4">
+                <div>
+                  <span className="text-sm text-gray-500">
+                    עודכן: {new Date(selectedAssignment.updatedAt).toLocaleDateString('he-IL')}
+                  </span>
+                </div>
+                <div className="space-x-2">
+                  <select
+                    value={selectedAssignment.status}
+                    onChange={(e) => updateAssignmentStatus(selectedAssignment.id, e.target.value)}
+                    className={`${getStatusBadgeClass(selectedAssignment.status)} border-0 cursor-pointer`}
+                  >
+                    <option value="pending">טרם הוגש</option>
+                    <option value="submitted">ממתין לבדיקה</option>
+                    <option value="review">בבדיקה</option>
+                    <option value="completed">הושלם</option>
+                    <option value="revision">נדרש תיקון</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
