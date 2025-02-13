@@ -134,7 +134,7 @@ const StudentLessonPage = () => {
   const isSubmitted = ['pending_review', 'review', 'completed'].includes(assignment?.status);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 text-right">
       {showSuccessAlert && (
         <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50">
           {successMessage}
@@ -145,7 +145,7 @@ const StudentLessonPage = () => {
         {/* כותרת השיעור וסטטוס */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex justify-between items-start">
-            <div>
+            <div className="w-full text-right">
               <h1 className="text-3xl font-bold text-gray-900">{lesson.title}</h1>
               <p className="text-gray-600 mt-2">
                 {new Date(lesson.date).toLocaleDateString('he-IL')}
@@ -166,12 +166,12 @@ const StudentLessonPage = () => {
         </div>
 
         {/* הקלטת השיעור */}
-        {lesson.zoomLink && (
+        {lesson.recordingLink && (
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">הקלטת השיעור</h2>
+            <h2 className="text-xl font-semibold mb-4 text-right">הקלטת השיעור</h2>
             <div className="aspect-w-16 aspect-h-9">
               <iframe
-                src={lesson.zoomLink}
+                src={`https://www.youtube.com/embed/${extractYouTubeId(lesson.recordingLink)}`}
                 className="w-full h-96"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
@@ -180,10 +180,26 @@ const StudentLessonPage = () => {
           </div>
         )}
 
+        {/* מצגת */}
+        {lesson.presentationLink && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-right">מצגת השיעור</h2>
+            <div className="aspect-w-16 aspect-h-9">
+              <iframe
+                src={`https://docs.google.com/presentation/d/${extractGoogleSlidesId(lesson.presentationLink)}/embed`}
+                className="w-full h-96"
+                allowFullScreen={true}
+                mozallowfullscreen="true"
+                webkitallowfullscreen="true"
+              ></iframe>
+            </div>
+          </div>
+        )}
+
         {/* חומרי עזר */}
         {lesson.materials?.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">חומרי עזר</h2>
+            <h2 className="text-xl font-semibold mb-4 text-right">חומרי עזר</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {lesson.materials.map((material, index) => (
                 <a
@@ -191,9 +207,9 @@ const StudentLessonPage = () => {
                   href={material.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="flex items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-right"
                 >
-                  <span className="text-lg font-medium text-gray-900">{material.title}</span>
+                  <span className="text-lg font-medium text-gray-900 mr-auto">{material.title}</span>
                 </a>
               ))}
             </div>
@@ -203,7 +219,7 @@ const StudentLessonPage = () => {
         {/* המשימה */}
         {assignment && (
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="border-b pb-4 mb-6">
+            <div className="border-b pb-4 mb-6 text-right">
               <h2 className="text-2xl font-bold">המשימה שלך</h2>
               {assignment.dueDate && (
                 <p className="text-gray-600 mt-2">
@@ -212,17 +228,17 @@ const StudentLessonPage = () => {
               )}
             </div>
 
-            <div className="prose max-w-none">
+            <div className="prose max-w-none text-right">
               <SimpleEditor
                 content={assignment.content?.studentContent || assignment.content?.template || ''}
                 onChange={handleSaveContent}
                 readOnly={isSubmitted}
-                className="min-h-[300px]"
+                className="min-h-[300px] text-right"
               />
             </div>
 
             {!isSubmitted && (
-              <div className="mt-6 flex justify-end">
+              <div className="mt-6 flex justify-start">
                 <button
                   onClick={handleSubmitAssignment}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -237,5 +253,20 @@ const StudentLessonPage = () => {
     </div>
   );
 };
+
+// עזר פונקציות לחילוץ זיהויים
+function extractYouTubeId(url: string): string {
+  // חילוץ מזהה יוטיוב מ-URL שונים
+  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const match = url.match(youtubeRegex);
+  return match ? match[1] : '';
+}
+
+function extractGoogleSlidesId(url: string): string {
+  // חילוץ מזהה מצגת של גוגל מ-URL
+  const googleSlidesRegex = /\/presentation\/d\/([a-zA-Z0-9_-]+)/;
+  const match = url.match(googleSlidesRegex);
+  return match ? match[1] : '';
+}
 
 export default StudentLessonPage;
