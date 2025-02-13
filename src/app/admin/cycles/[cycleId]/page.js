@@ -29,20 +29,22 @@ const CycleLessonsPage = () => {
   const [presentationFile, setPresentationFile] = useState(null);
   const [materialFiles, setMaterialFiles] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-  const [newLesson, setNewLesson] = useState({
+const [newLesson, setNewLesson] = useState({
+  title: '',
+  date: '',
+  zoomLink: '',
+  presentationLink: '',
+  materials: [],
+  assignment: {
     title: '',
-    date: '',
-    zoomLink: '',
-    presentationLink: '',
-    materials: [],
-    assignment: {
-      title: '',
-      description: '',
-      dueDate: '',
-      templateDocUrl: ''
+    description: '',
+    dueDate: '',
+    content: {
+      template: '',
+      studentContent: ''
     }
-  });
-
+  }
+});
   useEffect(() => {
     if (cycleId) {
       fetchCycleDetails();

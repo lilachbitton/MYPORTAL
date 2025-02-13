@@ -12,7 +12,7 @@ import {
   query, 
   where 
 } from "firebase/firestore";
-import { duplicateGoogleDoc, shareDocument } from '@/services/googleDriveService';
+import SimpleEditor from '@/components/SimpleEditor';
 
 const AssignmentsPage = () => {
   const params = useParams();
@@ -53,8 +53,7 @@ const AssignmentsPage = () => {
       setLoading(false);
     }
   };
-
-  const fetchAssignments = async (lessonData) => {
+const fetchAssignments = async (lessonData) => {
     try {
       // קבלת כל התלמידים במחזור
       const studentsQuery = query(
@@ -88,24 +87,10 @@ const AssignmentsPage = () => {
             ...existingAssignment,
             student
           });
-        } else if (lessonData.assignment?.templateDocUrl) {
-          // יצירת מטלה חדשה והעתק של המסמך לתלמיד
+        } else if (lessonData.assignment?.content?.template) {
+          // יצירת מטלה חדשה לתלמיד
           const createAssignmentPromise = async () => {
             try {
-              const templateUrl = lessonData.assignment.templateDocUrl;
-              const fileId = templateUrl.match(/[-\w]{25,}/)[0];
-              
-              // יצירת העתק של מסמך המשימה
-              const newFileId = await duplicateGoogleDoc(
-                fileId,
-                `${lessonData.assignment.title} - ${student.fullName}`
-              );
-              
-              // שיתוף המסמך עם התלמיד
-              await shareDocument(newFileId, student.email);
-              
-              const newDocUrl = `https://docs.google.com/document/d/${newFileId}/edit`;
-
               // יצירת רשומת המטלה בפיירבייס
               const assignmentData = {
                 lessonId,
@@ -114,8 +99,10 @@ const AssignmentsPage = () => {
                 title: lessonData.assignment.title || '',
                 description: lessonData.assignment.description || '',
                 dueDate: lessonData.assignment.dueDate || '',
-                templateDocUrl: lessonData.assignment.templateDocUrl || '',
-                studentDocUrl: newDocUrl,
+                content: {
+                  template: lessonData.assignment.content.template,
+                  studentContent: ''  // התוכן של התלמיד מתחיל ריק
+                },
                 status: 'pending',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -130,12 +117,7 @@ const AssignmentsPage = () => {
                 body: JSON.stringify({
                   to: student.email,
                   subject: 'מטלה חדשה זמינה',
-                  text: `שלום ${student.fullName},
-                  
-מטלה חדשה בשיעור "${lessonData.title}" זמינה עבורך.
-קישור למטלה: ${newDocUrl}
-
-בהצלחה!`,
+                  text: `שלום ${student.fullName},\n\nמטלה חדשה בשיעור "${lessonData.title}" זמינה עבורך.\nאנא היכנס/י לפורטל לצפייה במטלה.\n\nבהצלחה!`,
                   username: student.email
                 }),
               });
@@ -148,14 +130,15 @@ const AssignmentsPage = () => {
 
             } catch (error) {
               console.error(`Error creating assignment for student ${student.fullName}:`, error);
-              throw error; // נזרוק את השגיאה כדי שנוכל לטפל בה ברמה גבוהה יותר
+              throw error;
             }
           };
 
           assignmentCreationPromises.push(createAssignmentPromise());
         }
       }
-// המתנה שכל המטלות ייווצרו
+
+      // המתנה שכל המטלות ייווצרו
       if (assignmentCreationPromises.length > 0) {
         try {
           await Promise.all(assignmentCreationPromises);
@@ -175,8 +158,7 @@ const AssignmentsPage = () => {
       setError('שגיאה בטעינת מטלות התלמידים');
     }
   };
-
-  const updateAssignmentStatus = async (assignmentId, newStatus) => {
+const updateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
       setLoading(true);
       setError(null);
@@ -252,7 +234,7 @@ const AssignmentsPage = () => {
       'submitted': 'ממתין לבדיקה',
       'review': 'בבדיקה',
       'completed': 'הושלם',
-      'revision': 'הוגש לבדיקה מחדש'
+      'revision': 'נדרש תיקון'
     };
     return texts[status] || 'טרם הוגש';
   };
@@ -311,7 +293,7 @@ const AssignmentsPage = () => {
     return <div className="p-4 text-center">לא נמצא שיעור</div>;
   }
 
-  return (
+  returnreturn (
     <div className="p-4" dir="rtl">
       {showSuccessAlert && (
         <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50">
@@ -320,7 +302,7 @@ const AssignmentsPage = () => {
       )}
 
       <div className="mb-6">
-<h1 className="text-2xl font-bold">{lesson.title}</h1>
+        <h1 className="text-2xl font-bold">{lesson.title}</h1>
         <p className="text-gray-600">ניהול מטלות תלמידים</p>
         {lesson.assignment?.title && (
           <div className="mt-4 p-4 bg-gray-50 rounded-lg">
@@ -334,15 +316,16 @@ const AssignmentsPage = () => {
                 תאריך הגשה: {new Date(lesson.assignment.dueDate).toLocaleDateString('he-IL')}
               </p>
             )}
-            {lesson.assignment.templateDocUrl && (
-              <a
-                href={lesson.assignment.templateDocUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:underline mt-2 block"
-              >
-                קישור לתבנית המשימה
-              </a>
+            {lesson.assignment.content?.template && (
+              <div className="mt-4">
+                <h3 className="text-md font-semibold mb-2">תוכן המטלה:</h3>
+                <div className="bg-white p-4 rounded border">
+                  <SimpleEditor
+                    content={lesson.assignment.content.template}
+                    readOnly={true}
+                  />
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -418,7 +401,7 @@ const AssignmentsPage = () => {
                     <option value="submitted">ממתין לבדיקה</option>
                     <option value="review">בבדיקה</option>
                     <option value="completed">הושלם</option>
-                    <option value="revision">הוגש לבדיקה מחדש</option>
+                    <option value="revision">נדרש תיקון</option>
                   </select>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -426,18 +409,20 @@ const AssignmentsPage = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
                   <div className="flex space-x-2 justify-end">
-                    {assignment.studentDocUrl ? (
-                      <a
-                        href={assignment.studentDocUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    {/* כפתור לצפייה בתשובת התלמיד */}
+                    {assignment.content?.studentContent && (
+                      <button
+                        onClick={() => {
+                          // כאן אפשר להוסיף לוגיקה לפתיחת מודל או ניווט לדף צפייה בתשובה
+                          alert('צפייה בתשובת התלמיד - יש להוסיף מודל או ניווט');
+                        }}
                         className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:border-blue-700 focus:shadow-outline-blue active:bg-blue-800 transition duration-150 ease-in-out ml-2"
                       >
-                        פתח מסמך
-                      </a>
-                    ) : (
-                      <span className="text-sm text-gray-500">אין מסמך</span>
+                        צפה בתשובה
+                      </button>
                     )}
+                    
+                    {/* כפתור לצ'אט */}
                     <button
                       onClick={() => window.location.href = `/admin/cycles/${cycleId}/lessons/${lessonId}/assignments/${assignment.id}/chat`}
                       className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:border-purple-700 focus:shadow-outline-purple active:bg-purple-800 transition duration-150 ease-in-out"

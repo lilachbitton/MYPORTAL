@@ -10,6 +10,11 @@
   },
   "dependencies": {
     "@shadcn/ui": "^0.0.4",
+    "@tiptap/extension-text-align": "^2.11.5",
+    "@tiptap/extension-underline": "^2.11.5",
+    "@tiptap/pm": "^2.11.5",
+    "@tiptap/react": "^2.11.5",
+    "@tiptap/starter-kit": "^2.11.5",
     "firebase": "^11.2.0",
     "framer-motion": "^12.3.1",
     "fs": "^0.0.1-security",
