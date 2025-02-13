@@ -2,70 +2,82 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 
-// יצירת אובייקט הזדהות עם Service Account
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    client_email: process.env.GOOGLE_CLIENT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY,
-  },
-  scopes: [
-    'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/drive.readonly'
-  ],
-});
+// הגדרת אובייקט האותנטיקציה
+const auth = new google.auth.JWT(
+  process.env.GOOGLE_CLIENT_EMAIL,
+  null,
+  process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  [
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/drive.file'
+  ]
+);
 
 export async function POST(request) {
   try {
     const { fileId, title, email } = await request.json();
     
-    // יצירת אובייקט Drive עם ההזדהות החדשה
+    // אתחול client של Drive API
     const drive = google.drive({ version: 'v3', auth });
-    
-    console.log('Starting document copy process...', { fileId, title });
 
-    // בדיקה שהקובץ נמצא בתיקייה המורשית
+    // בדיקת החיבור לפני המשך הפעולה
     try {
-      const file = await drive.files.get({
-        fileId: fileId,
-        fields: 'parents'
-      });
-
-      const isInCorrectFolder = file.data.parents?.includes(process.env.TEMPLATE_FOLDER_ID);
-      if (!isInCorrectFolder) {
-        return NextResponse.json(
-          { 
-            error: 'המסמך חייב להיות בתיקיית התבניות. אנא העבירי את המסמך לתיקייה הייעודית למשימות.',
-          },
-          { status: 400 }
-        );
-      }
-    } catch (error) {
-      console.error('Error checking file location:', error);
-      // אם לא הצלחנו לבדוק את מיקום הקובץ, נמשיך בכל זאת
+      await auth.authorize();
+      console.log('Successfully connected to Google Drive API');
+    } catch (authError) {
+      console.error('Auth error:', authError);
+      return NextResponse.json(
+        { error: 'שגיאת התחברות לגוגל דרייב', details: authError.message },
+        { status: 401 }
+      );
     }
     
+    console.log('Starting document copy process...', { fileId, title });
+    
     // שכפול המסמך
-    const copyResponse = await drive.files.copy({
-      fileId,
-      requestBody: { name: title }
-    });
+    let copyResponse;
+    try {
+      copyResponse = await drive.files.copy({
+        fileId,
+        requestBody: { name: title }
+      });
+      console.log('Copy response:', copyResponse.data);
+    } catch (copyError) {
+      console.error('Copy error:', copyError);
+      return NextResponse.json(
+        { error: 'שגיאה בשכפול המסמך', details: copyError.message },
+        { status: 500 }
+      );
+    }
     
     const newFileId = copyResponse.data.id;
     console.log('Document copied successfully:', newFileId);
     
     // שיתוף המסמך
-    await drive.permissions.create({
-      fileId: newFileId,
-      requestBody: {
-        role: 'writer',
-        type: 'user',
-        emailAddress: email
-      },
-      // חשוב: לא לשלוח מייל הודעה כי אנחנו שולחים מייל משלנו
-      sendNotificationEmail: false
-    });
-    
-    console.log('Document shared successfully with:', email);
+    try {
+      await drive.permissions.create({
+        fileId: newFileId,
+        requestBody: {
+          role: 'writer',
+          type: 'user',
+          emailAddress: email
+        },
+        sendNotificationEmail: false
+      });
+      console.log('Document shared successfully with:', email);
+    } catch (shareError) {
+      console.error('Share error:', shareError);
+      // אם השיתוף נכשל, ננסה למחוק את העותק שיצרנו
+      try {
+        await drive.files.delete({ fileId: newFileId });
+      } catch (deleteError) {
+        console.error('Error deleting file after share failure:', deleteError);
+      }
+      return NextResponse.json(
+        { error: 'שגיאה בשיתוף המסמך', details: shareError.message },
+        { status: 500 }
+      );
+    }
     
     return NextResponse.json({ 
       fileId: newFileId,
@@ -74,18 +86,9 @@ export async function POST(request) {
     
   } catch (error) {
     console.error('Google Drive API error:', error);
-    
-    // הודעת שגיאה ידידותית למשתמש
-    let userMessage = 'שגיאה בעיבוד המסמך';
-    if (error.message?.includes('File not found')) {
-      userMessage = 'הקובץ לא נמצא. אנא ודאי שהקישור תקין ושיש לך הרשאות גישה';
-    } else if (error.message?.includes('Insufficient permissions')) {
-      userMessage = 'אין מספיק הרשאות לביצוע הפעולה. אנא ודאי שהקובץ נמצא בתיקייה הנכונה';
-    }
-
     return NextResponse.json(
       { 
-        error: userMessage,
+        error: 'שגיאה כללית',
         details: error.message,
         stack: error.stack
       },
