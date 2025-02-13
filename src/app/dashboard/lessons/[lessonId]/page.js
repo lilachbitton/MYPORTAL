@@ -109,23 +109,21 @@ const StudentLessonPage = () => {
 
   const getStatusColor = (status) => {
     switch(status) {
-      case 'draft': return 'bg-yellow-100 text-yellow-800 border border-yellow-300';
-      case 'pending_review': return 'bg-blue-100 text-blue-800 border border-blue-300';
-      case 'review': return 'bg-purple-100 text-purple-800 border border-purple-300';
-      case 'completed': return 'bg-green-100 text-green-800 border border-green-300';
-      case 'revision': return 'bg-red-100 text-red-800 border border-red-300';
+      case 'new': return 'bg-gray-100 text-gray-800 border border-gray-300';
+      case 'submitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
+      case 'feedback': return 'bg-yellow-100 text-yellow-800 border border-yellow-300';
+      case 'resubmitted': return 'bg-green-100 text-green-800 border border-green-300';
       default: return 'bg-gray-100 text-gray-800 border border-gray-300';
     }
   };
 
   const getStatusText = (status) => {
     switch(status) {
-      case 'draft': return 'טיוטה';
-      case 'pending_review': return 'ממתין לבדיקה';
-      case 'review': return 'בבדיקה';
-      case 'completed': return 'הושלם';
-      case 'revision': return 'נדרש תיקון';
-      default: return 'לא ידוע';
+      case 'new': return 'חדש';
+      case 'submitted': return 'הוגש לבדיקה';
+      case 'feedback': return 'לאחר משוב';
+      case 'resubmitted': return 'נשלח לבדיקה מחדש';
+      default: return 'חדש';
     }
   };
 
@@ -164,10 +162,10 @@ const StudentLessonPage = () => {
       <div className="max-w-5xl mx-auto space-y-8">
         {/* כותרת השיעור */}
         <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4 border-b pb-4 border-orange-500">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4 border-b pb-4 border-orange-500 text-center">
             {lesson.title}
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 text-center">
             {new Date(lesson.date).toLocaleDateString('he-IL')}
           </p>
         </div>
@@ -180,13 +178,15 @@ const StudentLessonPage = () => {
             </h2>
             <div className="aspect-w-16 aspect-h-9 rounded-xl overflow-hidden">
               <iframe
-                src={lesson.zoomLink}
+                src={lesson.zoomLink?.includes('vimeo') 
+                  ? `${lesson.zoomLink}?autoplay=0&title=0&byline=0&portrait=0` 
+                  : lesson.zoomLink?.includes('youtu') 
+                    ? `https://www.youtube.com/embed/${lesson.zoomLink.split('v=')[1]}`
+                    : lesson.zoomLink}
                 className="w-full h-96 rounded-xl"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                allow="autoplay; fullscreen; picture-in-picture"
                 allowFullScreen
                 frameBorder="0"
-                webkitallowfullscreen="true"
-                mozallowfullscreen="true"
                 title="שיעור מוקלט"
               ></iframe>
             </div>
