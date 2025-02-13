@@ -224,7 +224,7 @@ const StudentLessonPage = () => {
         {/* המשימה */}
         {assignment && (
           <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
-            <div className="flex justify-between items-center border-b pb-6 mb-6 border-orange-500">
+            <div className="flex flex-row-reverse justify-between items-center border-b pb-6 mb-6 border-orange-500">
               <div className="text-right">
                 <h2 className="text-2xl font-bold mb-2">המשימה שלך</h2>
                 {assignment.dueDate && (
@@ -244,7 +244,7 @@ const StudentLessonPage = () => {
                 onChange={handleSaveContent}
                 readOnly={isSubmitted}
                 className="min-h-[300px] bg-gray-50 rounded-xl p-6 shadow-inner" 
-              style={{ direction: 'rtl' }}
+              dir="rtl"
               />
             </div>
 
