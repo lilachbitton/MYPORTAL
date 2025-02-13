@@ -314,7 +314,7 @@ if (!cycle) {
                     <button
                       type="button"
                       className={`px-4 py-2 ${uploadingPresentation ? 'bg-gray-400' : 'bg-gray-200 hover:bg-gray-300'} text-gray-700 rounded`}
-                      disabled={isLoading || uploading Presentation}
+                      disabled={isLoading || uploadingPresentation}
                     >
                       {uploadingPresentation ? 'מעלה...' : 'העלאת קובץ'}
                     </button>
