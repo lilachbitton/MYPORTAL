@@ -21,14 +21,9 @@ const StudentLessonPage = () => {
   const [assignment, setAssignment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [studentId, setStudentId] = useState(null); // בהמשך נחליף את זה עם מערכת אותנטיקציה
-  const [successMessage, setSuccessMessage] = useState('');
+  const [studentId, setStudentId] = useState("eGjUZxKRfWTgViqjzpODAki1okA2");
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-
-  useEffect(() => {
-    // כרגע נשתמש ב-ID קבוע לצורך הדגמה
-    setStudentId("eGjUZxKRfWTgViqjzpODAki1okA2");
-  }, []);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     if (lessonId && studentId) {
@@ -98,15 +93,14 @@ const StudentLessonPage = () => {
       if (!assignment?.id) return;
 
       await updateDoc(doc(db, "assignments", assignment.id), {
-        status: 'submitted',
+        status: 'pending_review',
         updatedAt: new Date().toISOString()
       });
 
-      setSuccessMessage('המטלה הוגשה בהצלחה');
+      setSuccessMessage('המטלה נשלחה לבדיקה');
       setShowSuccessAlert(true);
       setTimeout(() => setShowSuccessAlert(false), 3000);
       
-      // רענון הנתונים
       await fetchLessonAndAssignment();
 
     } catch (error) {
@@ -137,133 +131,109 @@ const StudentLessonPage = () => {
     return <div className="p-4 text-center">לא נמצא שיעור</div>;
   }
 
-  const isSubmitted = assignment?.status === 'submitted' || 
-                     assignment?.status === 'review' || 
-                     assignment?.status === 'completed';
+  const isSubmitted = ['pending_review', 'review', 'completed'].includes(assignment?.status);
 
   return (
-    <div className="p-4" dir="rtl">
+    <div className="min-h-screen bg-gray-50">
       {showSuccessAlert && (
         <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50">
           {successMessage}
         </div>
       )}
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">{lesson.title}</h1>
-        <p className="text-gray-600">
-          תאריך: {new Date(lesson.date).toLocaleDateString('he-IL')}
-        </p>
-      </div>
-
-      {lesson.zoomLink && (
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold mb-2">הקלטת השיעור:</h2>
-          <a 
-            href={lesson.zoomLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500 hover:underline"
-          >
-            צפה בהקלטה
-          </a>
-        </div>
-      )}
-
-      {lesson.presentationLink && (
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold mb-2">מצגת השיעור:</h2>
-          <a 
-            href={lesson.presentationLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500 hover:underline"
-          >
-            צפה במצגת
-          </a>
-        </div>
-      )}
-
-      {lesson.materials?.length > 0 && (
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold mb-2">חומרי עזר:</h2>
-          <div className="space-y-2">
-            {lesson.materials.map((material, index) => (
-              <a 
-                key={index}
-                href={material.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block text-blue-500 hover:underline"
-              >
-                {material.title}
-              </a>
-            ))}
+      <div className="max-w-5xl mx-auto py-8 px-4">
+        {/* כותרת השיעור וסטטוס */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">{lesson.title}</h1>
+              <p className="text-gray-600 mt-2">
+                {new Date(lesson.date).toLocaleDateString('he-IL')}
+              </p>
+            </div>
+            {assignment && (
+              <div className="bg-gray-100 px-4 py-2 rounded-full">
+                <span className="text-gray-700">
+                  {assignment.status === 'draft' && 'טיוטה'}
+                  {assignment.status === 'pending_review' && 'ממתין לבדיקה'}
+                  {assignment.status === 'review' && 'בבדיקה'}
+                  {assignment.status === 'completed' && 'הושלם'}
+                  {assignment.status === 'revision' && 'נדרש תיקון'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-      {assignment && (
-        <div className="mt-8">
-          <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-            <div className="p-6">
-              <h2 className="text-xl font-bold mb-4">המטלה שלך</h2>
-              
-              <div className="mb-4">
-                <p className="text-gray-600">סטטוס: {
-                  {
-                    'pending': 'טרם הוגש',
-                    'draft': 'טיוטה',
-                    'submitted': 'הוגש',
-                    'review': 'בבדיקה',
-                    'completed': 'הושלם',
-                    'revision': 'נדרש תיקון'
-                  }[assignment.status] || assignment.status
-                }</p>
-                {assignment.dueDate && (
-                  <p className="text-gray-600">
-                    תאריך הגשה: {new Date(assignment.dueDate).toLocaleDateString('he-IL')}
-                  </p>
-                )}
-              </div>
-
-              {assignment.content?.template && (
-                <div className="mb-6">
-                  <h3 className="font-bold mb-2">המשימה:</h3>
-                  <div className="bg-gray-50 p-4 rounded border max-h-60 overflow-y-auto">
-                    <SimpleEditor
-                      content={assignment.content.template}
-                      readOnly={true}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h3 className="font-bold mb-2">התשובה שלך:</h3>
-                <div className="bg-white border rounded">
-                  <SimpleEditor
-                    content={assignment.content?.studentContent || ''}
-                    readOnly={isSubmitted}
-                    onChange={handleSaveContent}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex justify-end">
-                {!isSubmitted && (
-                  <button
-                    onClick={handleSubmitAssignment}
-                    className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                  >
-                    הגש מטלה
-                  </button>
-                )}
-              </div>
+        {/* הקלטת השיעור */}
+        {lesson.zoomLink && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">הקלטת השיעור</h2>
+            <div className="aspect-w-16 aspect-h-9">
+              <iframe
+                src={lesson.zoomLink}
+                className="w-full h-96"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              ></iframe>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* חומרי עזר */}
+        {lesson.materials?.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">חומרי עזר</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {lesson.materials.map((material, index) => (
+                <a
+                  key={index}
+                  href={material.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <span className="text-lg font-medium text-gray-900">{material.title}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* המשימה */}
+        {assignment && (
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="border-b pb-4 mb-6">
+              <h2 className="text-2xl font-bold">המשימה שלך</h2>
+              {assignment.dueDate && (
+                <p className="text-gray-600 mt-2">
+                  יש להגיש עד: {new Date(assignment.dueDate).toLocaleDateString('he-IL')}
+                </p>
+              )}
+            </div>
+
+            <div className="prose max-w-none">
+              <SimpleEditor
+                content={assignment.content?.studentContent || assignment.content?.template || ''}
+                onChange={handleSaveContent}
+                readOnly={isSubmitted}
+                className="min-h-[300px]"
+              />
+            </div>
+
+            {!isSubmitted && (
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={handleSubmitAssignment}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  הגש לבדיקה
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
