@@ -25,6 +25,7 @@ const AssignmentsPage = () => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (lessonId && cycleId) {
@@ -34,16 +35,20 @@ const AssignmentsPage = () => {
 
   const fetchLessonDetails = async () => {
     try {
+      setLoading(true);
+      setError(null);
+      
       const lessonDoc = await getDoc(doc(db, "lessons", lessonId));
       if (lessonDoc.exists()) {
-        setLesson({ id: lessonDoc.id, ...lessonDoc.data() });
-        await fetchAssignments(lessonDoc.data());
+        const lessonData = { id: lessonDoc.id, ...lessonDoc.data() };
+        setLesson(lessonData);
+        await fetchAssignments(lessonData);
       } else {
         throw new Error('השיעור לא נמצא');
       }
     } catch (error) {
       console.error("שגיאה בטעינת פרטי השיעור:", error);
-      alert('שגיאה בטעינת פרטי השיעור');
+      setError('שגיאה בטעינת פרטי השיעור');
     } finally {
       setLoading(false);
     }
@@ -71,109 +76,146 @@ const AssignmentsPage = () => {
 
       // יצירת או עדכון מטלות לכל התלמידים
       const assignmentsData = [];
+      const assignmentCreationPromises = [];
+
       for (const studentDoc of studentsSnapshot.docs) {
         const student = { id: studentDoc.id, ...studentDoc.data() };
         const existingAssignment = existingAssignments.get(student.id);
 
         if (existingAssignment) {
+          // אם כבר קיימת מטלה לתלמיד
           assignmentsData.push({
             ...existingAssignment,
             student
           });
         } else if (lessonData.assignment?.templateDocUrl) {
-          // יצירת מטלה חדשה לתלמיד
-          const assignmentData = {
-            lessonId,
-            cycleId,
-            studentId: student.id,
-            title: lessonData.assignment.title || '',
-            description: lessonData.assignment.description || '',
-            dueDate: lessonData.assignment.dueDate || '',
-            templateDocUrl: lessonData.assignment.templateDocUrl || '',
-            status: 'pending',
-            createdAt: new Date().toISOString()
+          // יצירת מטלה חדשה והעתק של המסמך לתלמיד
+          const createAssignmentPromise = async () => {
+            try {
+              const templateUrl = lessonData.assignment.templateDocUrl;
+              const fileId = templateUrl.match(/[-\w]{25,}/)[0];
+              
+              // יצירת העתק של מסמך המשימה
+              const newFileId = await duplicateGoogleDoc(
+                fileId,
+                `${lessonData.assignment.title} - ${student.fullName}`
+              );
+              
+              // שיתוף המסמך עם התלמיד
+              await shareDocument(newFileId, student.email);
+              
+              const newDocUrl = `https://docs.google.com/document/d/${newFileId}/edit`;
+
+              // יצירת רשומת המטלה בפיירבייס
+              const assignmentData = {
+                lessonId,
+                cycleId,
+                studentId: student.id,
+                title: lessonData.assignment.title || '',
+                description: lessonData.assignment.description || '',
+                dueDate: lessonData.assignment.dueDate || '',
+                templateDocUrl: lessonData.assignment.templateDocUrl || '',
+                studentDocUrl: newDocUrl,
+                status: 'pending',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              };
+
+              const newAssignmentRef = await addDoc(collection(db, "assignments"), assignmentData);
+
+              // שליחת מייל לתלמיד
+              await fetch('/api/sendEmail', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  to: student.email,
+                  subject: 'מטלה חדשה זמינה',
+                  text: `שלום ${student.fullName},
+                  
+מטלה חדשה בשיעור "${lessonData.title}" זמינה עבורך.
+קישור למטלה: ${newDocUrl}
+
+בהצלחה!`,
+                  username: student.email
+                }),
+              });
+
+              assignmentsData.push({
+                id: newAssignmentRef.id,
+                ...assignmentData,
+                student
+              });
+
+            } catch (error) {
+              console.error(`Error creating assignment for student ${student.fullName}:`, error);
+              throw error; // נזרוק את השגיאה כדי שנוכל לטפל בה ברמה גבוהה יותר
+            }
           };
 
-          const newAssignmentRef = await addDoc(collection(db, "assignments"), assignmentData);
-          assignmentsData.push({
-            id: newAssignmentRef.id,
-            ...assignmentData,
-            student
-          });
+          assignmentCreationPromises.push(createAssignmentPromise());
+        }
+      }
+// המתנה שכל המטלות ייווצרו
+      if (assignmentCreationPromises.length > 0) {
+        try {
+          await Promise.all(assignmentCreationPromises);
+          setSuccessMessage(`נוצרו ${assignmentCreationPromises.length} מטלות חדשות`);
+          setShowSuccessAlert(true);
+          setTimeout(() => setShowSuccessAlert(false), 3000);
+        } catch (error) {
+          console.error("Error creating assignments:", error);
+          setError('שגיאה ביצירת חלק מהמטלות');
         }
       }
 
       setAssignments(assignmentsData);
+
     } catch (error) {
       console.error("שגיאה בטעינת מטלות:", error);
-      alert('שגיאה בטעינת מטלות התלמידים');
-    }
-  };
-
-  const createAssignmentForStudent = async (assignment, student) => {
-    try {
-      setLoading(true);
-      const templateUrl = lesson.assignment.templateDocUrl;
-      const fileId = templateUrl.match(/[-\w]{25,}/)[0];
-      
-      const newFileId = await duplicateGoogleDoc(
-        fileId,
-        `${lesson.assignment.title} - ${student.fullName}`
-      );
-      
-      await shareDocument(newFileId, student.email);
-      
-      const newDocUrl = `https://docs.google.com/document/d/${newFileId}/edit`;
-      
-      await updateDoc(doc(db, "assignments", assignment.id), {
-        studentDocUrl: newDocUrl,
-        status: 'pending',
-        updatedAt: new Date().toISOString()
-      });
-
-      // שליחת מייל לתלמיד
-      await fetch('/api/sendEmail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: student.email,
-          subject: 'מטלה חדשה זמינה',
-          text: `שלום ${student.fullName},\n\nמטלה חדשה בשיעור "${lesson.title}" זמינה עבורך.\nקישור למטלה: ${newDocUrl}`,
-          username: student.email
-        }),
-      });
-
-      setSuccessMessage('המטלה נוצרה בהצלחה ונשלחה לתלמיד');
-      setShowSuccessAlert(true);
-      setTimeout(() => setShowSuccessAlert(false), 3000);
-
-      await fetchLessonDetails();
-    } catch (error) {
-      console.error('Error creating assignment:', error);
-      alert('שגיאה ביצירת המטלה');
-    } finally {
-      setLoading(false);
+      setError('שגיאה בטעינת מטלות התלמידים');
     }
   };
 
   const updateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
       setLoading(true);
+      setError(null);
+
       await updateDoc(doc(db, "assignments", assignmentId), {
         status: newStatus,
         updatedAt: new Date().toISOString()
       });
       
-      if (newStatus === 'completed') {
-        const assignment = assignments.find(a => a.id === assignmentId);
-        if (assignment?.student?.email) {
+      const assignment = assignments.find(a => a.id === assignmentId);
+      
+      // שליחת מייל לתלמיד בהתאם לסטטוס
+      if (assignment?.student?.email) {
+        let emailSubject = '';
+        let emailText = '';
+
+        switch (newStatus) {
+          case 'completed':
+            emailSubject = 'המטלה שלך נבדקה ואושרה';
+            emailText = `שלום ${assignment.student.fullName},\n\nהמטלה שהגשת בשיעור "${lesson?.title}" נבדקה ואושרה.\nכל הכבוד!`;
+            break;
+          case 'revision':
+            emailSubject = 'נדרשים תיקונים במטלה שהגשת';
+            emailText = `שלום ${assignment.student.fullName},\n\nהמטלה שהגשת בשיעור "${lesson?.title}" נבדקה ונדרשים מספר תיקונים.\nאנא בדוק/י את ההערות במסמך ובצע/י את התיקונים הנדרשים.`;
+            break;
+          case 'review':
+            emailSubject = 'המטלה שלך התקבלה ונמצאת בבדיקה';
+            emailText = `שלום ${assignment.student.fullName},\n\nהמטלה שהגשת בשיעור "${lesson?.title}" התקבלה ונמצאת בבדיקה.\nניצור איתך קשר בהקדם.`;
+            break;
+        }
+
+        if (emailSubject && emailText) {
           await fetch('/api/sendEmail', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               to: assignment.student.email,
-              subject: 'המטלה שלך נבדקה',
-              text: `שלום ${assignment.student.fullName},\n\nהמטלה שהגשת בשיעור "${lesson?.title}" נבדקה.\nאנא היכנס/י למערכת לצפייה בהערות המנטור.`,
+              subject: emailSubject,
+              text: emailText,
               username: assignment.student.email
             }),
           });
@@ -187,13 +229,13 @@ const AssignmentsPage = () => {
       await fetchLessonDetails();
     } catch (error) {
       console.error("שגיאה בעדכון סטטוס המטלה:", error);
-      alert('שגיאה בעדכון סטטוס המטלה');
+      setError('שגיאה בעדכון סטטוס המטלה');
     } finally {
       setLoading(false);
     }
   };
 
-const getStatusBadgeClass = (status) => {
+  const getStatusBadgeClass = (status) => {
     const classes = {
       'pending': 'bg-gray-100 text-gray-800',
       'submitted': 'bg-yellow-100 text-yellow-800',
@@ -246,11 +288,21 @@ const getStatusBadgeClass = (status) => {
       return aValue < bValue ? 1 : -1;
     });
   };
-
+// Render component
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-center">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
       </div>
     );
   }
@@ -268,19 +320,29 @@ const getStatusBadgeClass = (status) => {
       )}
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">{lesson.title}</h1>
+<h1 className="text-2xl font-bold">{lesson.title}</h1>
         <p className="text-gray-600">ניהול מטלות תלמידים</p>
         {lesson.assignment?.title && (
-          <div className="mt-2">
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
             <h2 className="text-lg font-semibold">פרטי המטלה:</h2>
-            <p>{lesson.assignment.title}</p>
+            <p className="text-gray-800 mt-1">{lesson.assignment.title}</p>
             {lesson.assignment.description && (
-              <p className="text-gray-600 mt-1">{lesson.assignment.description}</p>
+              <p className="text-gray-600 mt-2">{lesson.assignment.description}</p>
             )}
             {lesson.assignment.dueDate && (
-              <p className="text-gray-600">
+              <p className="text-gray-600 mt-2">
                 תאריך הגשה: {new Date(lesson.assignment.dueDate).toLocaleDateString('he-IL')}
               </p>
+            )}
+            {lesson.assignment.templateDocUrl && (
+              <a
+                href={lesson.assignment.templateDocUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline mt-2 block"
+              >
+                קישור לתבנית המשימה
+              </a>
             )}
           </div>
         )}
@@ -322,7 +384,7 @@ const getStatusBadgeClass = (status) => {
                 onClick={() => sortBy('status')}
               >
                 סטטוס
-                {sortConfig.key === 'status' && (sortConfig.direction === 'ascending' ?' ↑' : ' ↓')}
+                {sortConfig.key === 'status' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 תאריך עדכון
@@ -341,7 +403,7 @@ const getStatusBadgeClass = (status) => {
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
+                  <div className="text-sm text-gray-500">
                     {assignment.student?.email}
                   </div>
                 </td>
@@ -349,7 +411,7 @@ const getStatusBadgeClass = (status) => {
                   <select
                     value={assignment.status}
                     onChange={(e) => updateAssignmentStatus(assignment.id, e.target.value)}
-                    className={`${getStatusBadgeClass(assignment.status)} border-0 cursor-pointer`}
+                    className={`${getStatusBadgeClass(assignment.status)} border-0 cursor-pointer w-full`}
                     disabled={loading}
                   >
                     <option value="pending">טרם הוגש</option>
@@ -364,25 +426,17 @@ const getStatusBadgeClass = (status) => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
                   <div className="flex space-x-2 justify-end">
-                    {!assignment.studentDocUrl && lesson.assignment?.templateDocUrl ? (
-                      <button
-                        onClick={() => createAssignmentForStudent(assignment, assignment.student)}
-                        className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:border-green-700 focus:shadow-outline-green active:bg-green-800 transition duration-150 ease-in-out ml-2"
-                        disabled={loading}
+                    {assignment.studentDocUrl ? (
+                      <a
+                        href={assignment.studentDocUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:border-blue-700 focus:shadow-outline-blue active:bg-blue-800 transition duration-150 ease-in-out ml-2"
                       >
-                        צור מסמך
-                      </button>
+                        פתח מסמך
+                      </a>
                     ) : (
-                      assignment.studentDocUrl && (
-                        <a
-                          href={assignment.studentDocUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:border-blue-700 focus:shadow-outline-blue active:bg-blue-800 transition duration-150 ease-in-out ml-2"
-                        >
-                          פתח מסמך
-                        </a>
-                      )
+                      <span className="text-sm text-gray-500">אין מסמך</span>
                     )}
                     <button
                       onClick={() => window.location.href = `/admin/cycles/${cycleId}/lessons/${lessonId}/assignments/${assignment.id}/chat`}
