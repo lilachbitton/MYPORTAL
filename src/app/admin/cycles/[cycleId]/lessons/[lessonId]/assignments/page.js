@@ -2,7 +2,16 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { db } from '@/firebase/config';
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where } from "firebase/firestore";
+import { 
+  collection, 
+  getDocs, 
+  addDoc, 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  query, 
+  where 
+} from "firebase/firestore";
 import { duplicateGoogleDoc, shareDocument } from '@/services/googleDriveService';
 
 const AssignmentsPage = () => {
@@ -13,6 +22,9 @@ const AssignmentsPage = () => {
   const [assignments, setAssignments] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     if (lessonId && cycleId) {
@@ -26,9 +38,12 @@ const AssignmentsPage = () => {
       if (lessonDoc.exists()) {
         setLesson({ id: lessonDoc.id, ...lessonDoc.data() });
         await fetchAssignments(lessonDoc.data());
+      } else {
+        throw new Error('השיעור לא נמצא');
       }
     } catch (error) {
       console.error("שגיאה בטעינת פרטי השיעור:", error);
+      alert('שגיאה בטעינת פרטי השיעור');
     } finally {
       setLoading(false);
     }
@@ -39,8 +54,8 @@ const AssignmentsPage = () => {
       // קבלת כל התלמידים במחזור
       const studentsQuery = query(
         collection(db, "users"),
-        where("cycleId", "==", cycleId),
-        where("role", "==", "student")
+        where("cycle", "==", cycleId),
+        where("isActive", "==", true)
       );
       const studentsSnapshot = await getDocs(studentsQuery);
 
@@ -91,11 +106,13 @@ const AssignmentsPage = () => {
       setAssignments(assignmentsData);
     } catch (error) {
       console.error("שגיאה בטעינת מטלות:", error);
+      alert('שגיאה בטעינת מטלות התלמידים');
     }
   };
 
   const createAssignmentForStudent = async (assignment, student) => {
     try {
+      setLoading(true);
       const templateUrl = lesson.assignment.templateDocUrl;
       const fileId = templateUrl.match(/[-\w]{25,}/)[0];
       
@@ -114,6 +131,7 @@ const AssignmentsPage = () => {
         updatedAt: new Date().toISOString()
       });
 
+      // שליחת מייל לתלמיד
       await fetch('/api/sendEmail', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,15 +143,22 @@ const AssignmentsPage = () => {
         }),
       });
 
-      fetchLessonDetails();
+      setSuccessMessage('המטלה נוצרה בהצלחה ונשלחה לתלמיד');
+      setShowSuccessAlert(true);
+      setTimeout(() => setShowSuccessAlert(false), 3000);
+
+      await fetchLessonDetails();
     } catch (error) {
       console.error('Error creating assignment:', error);
       alert('שגיאה ביצירת המטלה');
+    } finally {
+      setLoading(false);
     }
   };
 
   const updateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
+      setLoading(true);
       await updateDoc(doc(db, "assignments", assignmentId), {
         status: newStatus,
         updatedAt: new Date().toISOString()
@@ -155,122 +180,230 @@ const AssignmentsPage = () => {
         }
       }
 
-      fetchLessonDetails();
+      setSuccessMessage('סטטוס המטלה עודכן בהצלחה');
+      setShowSuccessAlert(true);
+      setTimeout(() => setShowSuccessAlert(false), 3000);
+
+      await fetchLessonDetails();
     } catch (error) {
       console.error("שגיאה בעדכון סטטוס המטלה:", error);
+      alert('שגיאה בעדכון סטטוס המטלה');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
+const getStatusBadgeClass = (status) => {
+    const classes = {
       'pending': 'bg-gray-100 text-gray-800',
       'submitted': 'bg-yellow-100 text-yellow-800',
       'review': 'bg-blue-100 text-blue-800',
       'completed': 'bg-green-100 text-green-800',
       'revision': 'bg-red-100 text-red-800'
     };
-    return colors[status] || colors.pending;
+    return `px-2 py-1 rounded-full text-sm font-medium ${classes[status] || classes.pending}`;
   };
 
   const getStatusText = (status) => {
     const texts = {
-      'pending': 'ממתין להגשה',
-      'submitted': 'הוגש',
+      'pending': 'טרם הוגש',
+      'submitted': 'ממתין לבדיקה',
       'review': 'בבדיקה',
       'completed': 'הושלם',
-      'revision': 'דורש תיקונים'
+      'revision': 'הוגש לבדיקה מחדש'
     };
-    return texts[status] || 'ממתין להגשה';
+    return texts[status] || 'טרם הוגש';
+  };
+
+  const sortBy = (key) => {
+    let direction = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortedAssignments = () => {
+    const filtered = assignments.filter(assignment => 
+      assignment.student?.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      assignment.student?.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    if (!sortConfig.key) return filtered;
+
+    return [...filtered].sort((a, b) => {
+      let aValue = a.student?.[sortConfig.key] || '';
+      let bValue = b.student?.[sortConfig.key] || '';
+      
+      if (sortConfig.key === 'status') {
+        aValue = a[sortConfig.key] || '';
+        bValue = b[sortConfig.key] || '';
+      }
+
+      if (sortConfig.direction === 'ascending') {
+        return aValue > bValue ? 1 : -1;
+      }
+      return aValue < bValue ? 1 : -1;
+    });
   };
 
   if (loading) {
-    return <div className="p-4">טוען...</div>;
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
   if (!lesson) {
-    return <div className="p-4">לא נמצא שיעור</div>;
+    return <div className="p-4 text-center">לא נמצא שיעור</div>;
   }
-
-  const filteredAssignments = assignments.filter(assignment => 
-    assignment.student?.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    assignment.student?.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="p-4" dir="rtl">
+      {showSuccessAlert && (
+        <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50">
+          {successMessage}
+        </div>
+      )}
+
       <div className="mb-6">
         <h1 className="text-2xl font-bold">{lesson.title}</h1>
         <p className="text-gray-600">ניהול מטלות תלמידים</p>
+        {lesson.assignment?.title && (
+          <div className="mt-2">
+            <h2 className="text-lg font-semibold">פרטי המטלה:</h2>
+            <p>{lesson.assignment.title}</p>
+            {lesson.assignment.description && (
+              <p className="text-gray-600 mt-1">{lesson.assignment.description}</p>
+            )}
+            {lesson.assignment.dueDate && (
+              <p className="text-gray-600">
+                תאריך הגשה: {new Date(lesson.assignment.dueDate).toLocaleDateString('he-IL')}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 flex justify-between items-center">
         <input
           type="text"
           placeholder="חיפוש לפי שם תלמיד או אימייל..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full max-w-md p-2 border rounded-md"
+          className="w-64 px-4 py-2 border rounded-md"
         />
+        <div className="text-gray-600">
+          סה"כ תלמידים: {assignments.length}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredAssignments.map(assignment => (
-          <div key={assignment.id} className="bg-white rounded-lg shadow-lg p-4">
-            <div className="mb-4">
-              <h2 className="text-xl font-bold">{assignment.student?.fullName}</h2>
-              <p className="text-gray-600">{assignment.student?.email}</p>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">סטטוס:</label>
-              <select
-                value={assignment.status}
-                onChange={(e) => updateAssignmentStatus(assignment.id, e.target.value)}
-                className="w-full p-2 border rounded"
+      <div className="overflow-x-auto bg-white rounded-lg shadow">
+        <table className="min-w-full">
+          <thead>
+            <tr className="bg-gray-50 border-b">
+              <th 
+                className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => sortBy('fullName')}
               >
-                <option value="pending">ממתין להגשה</option>
-                <option value="submitted">הוגש</option>
-                <option value="review">בבדיקה</option>
-                <option value="completed">הושלם</option>
-                <option value="revision">דורש תיקונים</option>
-              </select>
-            </div>
-
-            <div className="mb-4">
-              <span className={`inline-block px-2 py-1 rounded ${getStatusColor(assignment.status)}`}>
-                {getStatusText(assignment.status)}
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {!assignment.studentDocUrl && lesson.assignment?.templateDocUrl && (
-                <button
-                  onClick={() => createAssignmentForStudent(assignment, assignment.student)}
-                  className="w-full px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                >
-                  צור מסמך מטלה
-                </button>
-              )}
-              {assignment.studentDocUrl && (
-                <a
-                  href={assignment.studentDocUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full px-4 py-2 text-center bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  פתח מסמך מטלה
-                </a>
-              )}
-              <button
-                onClick={() => window.location.href = `/admin/cycles/${cycleId}/lessons/${lessonId}/assignments/${assignment.id}/chat`}
-                className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                שם התלמיד 
+                {sortConfig.key === 'fullName' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
+              </th>
+              <th 
+                className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => sortBy('email')}
               >
-                צ'אט עם התלמיד
-              </button>
-            </div>
-          </div>
-        ))}
+                אימייל
+                {sortConfig.key === 'email' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
+              </th>
+              <th 
+                className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => sortBy('status')}
+              >
+                סטטוס
+                {sortConfig.key === 'status' && (sortConfig.direction === 'ascending' ?' ↑' : ' ↓')}
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                תאריך עדכון
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                פעולות
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {getSortedAssignments().map(assignment => (
+              <tr key={assignment.id} className="hover:bg-gray-50">
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm font-medium text-gray-900">
+                    {assignment.student?.fullName}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-gray-900">
+                    {assignment.student?.email}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <select
+                    value={assignment.status}
+                    onChange={(e) => updateAssignmentStatus(assignment.id, e.target.value)}
+                    className={`${getStatusBadgeClass(assignment.status)} border-0 cursor-pointer`}
+                    disabled={loading}
+                  >
+                    <option value="pending">טרם הוגש</option>
+                    <option value="submitted">ממתין לבדיקה</option>
+                    <option value="review">בבדיקה</option>
+                    <option value="completed">הושלם</option>
+                    <option value="revision">הוגש לבדיקה מחדש</option>
+                  </select>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {assignment.updatedAt ? new Date(assignment.updatedAt).toLocaleDateString('he-IL') : '-'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
+                  <div className="flex space-x-2 justify-end">
+                    {!assignment.studentDocUrl && lesson.assignment?.templateDocUrl ? (
+                      <button
+                        onClick={() => createAssignmentForStudent(assignment, assignment.student)}
+                        className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:border-green-700 focus:shadow-outline-green active:bg-green-800 transition duration-150 ease-in-out ml-2"
+                        disabled={loading}
+                      >
+                        צור מסמך
+                      </button>
+                    ) : (
+                      assignment.studentDocUrl && (
+                        <a
+                          href={assignment.studentDocUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:border-blue-700 focus:shadow-outline-blue active:bg-blue-800 transition duration-150 ease-in-out ml-2"
+                        >
+                          פתח מסמך
+                        </a>
+                      )
+                    )}
+                    <button
+                      onClick={() => window.location.href = `/admin/cycles/${cycleId}/lessons/${lessonId}/assignments/${assignment.id}/chat`}
+                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:border-purple-700 focus:shadow-outline-purple active:bg-purple-800 transition duration-150 ease-in-out"
+                      disabled={loading}
+                    >
+                      צ'אט
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+
+      {assignments.length === 0 && (
+        <div className="text-center py-8 text-gray-500">
+          לא נמצאו תלמידים במחזור זה
+        </div>
+      )}
     </div>
   );
 };
