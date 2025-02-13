@@ -99,7 +99,6 @@ const StudentLessonPage = () => {
       setShowSuccessAlert(true);
       setTimeout(() => setShowSuccessAlert(false), 3000);
       
-      // עדכון מיידי של הסטטוס בממשק
       setAssignment(prev => ({
         ...prev,
         status: 'submitted'
@@ -192,7 +191,26 @@ const StudentLessonPage = () => {
                 allowFullScreen
                 frameBorder="0"
                 title="שיעור מוקלט"
-              ></iframe>
+              />
+            </div>
+          </div>
+        )}
+
+        {/* מצגת השיעור */}
+        {lesson.presentationLink && (
+          <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
+            <h2 className="text-2xl font-semibold mb-6 text-right border-b pb-4 border-orange-500">
+              מצגת השיעור
+            </h2>
+            <div className="flex justify-center">
+              <a
+                href={lesson.presentationLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1"
+              >
+                צפה במצגת
+              </a>
             </div>
           </div>
         )}
@@ -238,13 +256,17 @@ const StudentLessonPage = () => {
               </div>
             </div>
 
-            <div className="prose max-w-none text-right">
+            <div dir="rtl" style={{ direction: 'rtl' }}>
               <SimpleEditor
                 content={assignment.content?.studentContent || assignment.content?.template || ''}
                 onChange={handleSaveContent}
                 readOnly={isSubmitted}
-                className="min-h-[300px] bg-gray-50 rounded-xl p-6 shadow-inner" 
-              dir="rtl"
+                style={{
+                  direction: 'rtl',
+                  textAlign: 'right',
+                  minHeight: '300px',
+                }}
+                className="bg-gray-50 rounded-xl p-6 shadow-inner"
               />
             </div>
 
