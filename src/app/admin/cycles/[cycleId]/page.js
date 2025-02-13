@@ -16,7 +16,8 @@ import {
 } from "firebase/firestore";
 import { ref, deleteObject, listAll } from "firebase/storage";
 import { uploadFile } from '@/services/fileService';
-import { RichTextEditor } from '@/components/RichTextEditor';
+import RichTextEditor from '@/components/RichTextEditor';
+
 
 const CycleLessonsPage = () => {
   const params = useParams();
