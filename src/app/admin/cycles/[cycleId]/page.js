@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import { ref, deleteObject, listAll } from "firebase/storage";
 import { uploadFile } from '@/services/fileService';
+import SimpleEditor from '@/components/SimpleEditor';
 
 const CycleLessonsPage = () => {
   const params = useParams();
@@ -29,30 +30,30 @@ const CycleLessonsPage = () => {
   const [presentationFile, setPresentationFile] = useState(null);
   const [materialFiles, setMaterialFiles] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-const [newLesson, setNewLesson] = useState({
-  title: '',
-  date: '',
-  zoomLink: '',
-  presentationLink: '',
-  materials: [],
-  assignment: {
+  const [newLesson, setNewLesson] = useState({
     title: '',
-    description: '',
-    dueDate: '',
-    content: {
-      template: '',
-      studentContent: ''
+    date: '',
+    zoomLink: '',
+    presentationLink: '',
+    materials: [],
+    assignment: {
+      title: '',
+      description: '',
+      dueDate: '',
+      content: {
+        template: '',
+        studentContent: ''
+      }
     }
-  }
-});
+  });
+
   useEffect(() => {
     if (cycleId) {
       fetchCycleDetails();
       fetchLessons();
     }
   }, [cycleId]);
-
-  const fetchCycleDetails = async () => {
+const fetchCycleDetails = async () => {
     try {
       const cycleDoc = await getDoc(doc(db, "cycles", cycleId));
       if (cycleDoc.exists()) {
@@ -85,8 +86,7 @@ const [newLesson, setNewLesson] = useState({
       setIsLoading(false);
     }
   };
-
-  const handleDeleteLesson = async (lessonId) => {
+const handleDeleteLesson = async (lessonId) => {
     if (!window.confirm('האם אתה בטוח שברצונך למחוק את השיעור? פעולה זו בלתי הפיכה')) {
       return;
     }
@@ -110,15 +110,10 @@ const [newLesson, setNewLesson] = useState({
         await deleteAllFiles(materialsRef);
       } catch (storageError) {
         console.error("Error deleting files:", storageError);
-        // ממשיכים למחוק את המסמך גם אם יש שגיאה במחיקת הקבצים
       }
 
-      // מחיקת המסמך מ-Firestore
       await deleteDoc(doc(db, "lessons", lessonId));
-      
-      // רענון רשימת השיעורים
       await fetchLessons();
-      
       alert('השיעור נמחק בהצלחה');
     } catch (error) {
       console.error("Error deleting lesson:", error);
@@ -148,7 +143,10 @@ const [newLesson, setNewLesson] = useState({
           title: newLesson.assignment.title || '',
           description: newLesson.assignment.description || '',
           dueDate: newLesson.assignment.dueDate || '',
-          templateDocUrl: newLesson.assignment.templateDocUrl || ''
+          content: {
+            template: newLesson.assignment.content?.template || '',
+            studentContent: ''
+          }
         },
         updatedAt: new Date().toISOString()
       };
@@ -170,7 +168,10 @@ const [newLesson, setNewLesson] = useState({
           title: '',
           description: '',
           dueDate: '',
-          templateDocUrl: ''
+          content: {
+            template: '',
+            studentContent: ''
+          }
         }
       });
       setPresentationFile(null);
@@ -186,8 +187,7 @@ const [newLesson, setNewLesson] = useState({
       setIsLoading(false);
     }
   };
-
-  if (!cycle) {
+if (!cycle) {
     return <div className="p-4 text-center">טוען...</div>;
   }
 
@@ -216,7 +216,10 @@ const [newLesson, setNewLesson] = useState({
                 title: '',
                 description: '',
                 dueDate: '',
-                templateDocUrl: ''
+                content: {
+                  template: '',
+                  studentContent: ''
+                }
               }
             });
             setPresentationFile(null);
@@ -230,8 +233,7 @@ const [newLesson, setNewLesson] = useState({
           הוספת שיעור חדש
         </button>
       </div>
-
-      {showModal && (
+{showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-4">
@@ -312,7 +314,7 @@ const [newLesson, setNewLesson] = useState({
                     <button
                       type="button"
                       className={`px-4 py-2 ${uploadingPresentation ? 'bg-gray-400' : 'bg-gray-200 hover:bg-gray-300'} text-gray-700 rounded`}
-                      disabled={isLoading || uploadingPresentation}
+                      disabled={isLoading || uploading Presentation}
                     >
                       {uploadingPresentation ? 'מעלה...' : 'העלאת קובץ'}
                     </button>
@@ -364,7 +366,7 @@ const [newLesson, setNewLesson] = useState({
                             const newMaterialFiles = { ...materialFiles };
                             newMaterialFiles[index] = { uploading: true };
                             setMaterialFiles(newMaterialFiles);
-const result = await uploadFile(file, cycleId, editingLessonId || 'new', 'materials');
+                            const result = await uploadFile(file, cycleId, editingLessonId || 'new', 'materials');
                             const newMaterials = [...newLesson.materials];
                             newMaterials[index].url = result;
                             newMaterials[index].title = newMaterials[index].title || file.name;
@@ -457,21 +459,20 @@ const result = await uploadFile(file, cycleId, editingLessonId || 'new', 'materi
                   </div>
 
                   <div>
-                    <label className="block mb-1">תבנית המשימה (Google Docs):</label>
-                    <input
-                      type="url"
-                      value={newLesson.assignment.templateDocUrl}
-                      onChange={(e) => setNewLesson({
+                    <label className="block mb-1">תוכן המשימה:</label>
+                    <SimpleEditor
+                      content={newLesson.assignment.content?.template || ''}
+                      onChange={(html) => setNewLesson({
                         ...newLesson,
-                        assignment: { ...newLesson.assignment, templateDocUrl: e.target.value }
+                        assignment: { 
+                          ...newLesson.assignment,
+                          content: {
+                            ...newLesson.assignment.content,
+                            template: html
+                          }
+                        }
                       })}
-                      className="w-full p-2 border rounded"
-                      placeholder="הכנס קישור לדוקס תבנית..."
-                      disabled={isLoading}
                     />
-                    <p className="text-sm text-gray-500 mt-1">
-                      * יש להגדיר את הדוקס כך שכל אחד עם הקישור יכול להעתיק
-                    </p>
                   </div>
 
                   <div>
@@ -512,7 +513,10 @@ const result = await uploadFile(file, cycleId, editingLessonId || 'new', 'materi
                         title: '',
                         description: '',
                         dueDate: '',
-                        templateDocUrl: ''
+                        content: {
+                          template: '',
+                          studentContent: ''
+                        }
                       }
                     });
                     setPresentationFile(null);
@@ -529,8 +533,7 @@ const result = await uploadFile(file, cycleId, editingLessonId || 'new', 'materi
           </div>
         </div>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {lessons.map(lesson => (
           <div key={lesson.id} className="bg-white rounded-lg shadow-lg p-4">
             <h2 className="text-xl font-bold mb-2">{lesson.title}</h2>
@@ -589,15 +592,13 @@ const result = await uploadFile(file, cycleId, editingLessonId || 'new', 'materi
                       תאריך הגשה: {new Date(lesson.assignment.dueDate).toLocaleDateString('he-IL')}
                     </p>
                   )}
-                  {lesson.assignment.templateDocUrl && (
-                    <a 
-                      href={lesson.assignment.templateDocUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-500 hover:underline"
-                    >
-                      קישור לתבנית המשימה
-                    </a>
+                  {lesson.assignment.content?.template && (
+                    <div className="mt-2">
+                      <SimpleEditor
+                        content={lesson.assignment.content.template}
+                        readOnly={true}
+                      />
+                    </div>
                   )}
                 </div>
               )}
@@ -616,7 +617,10 @@ const result = await uploadFile(file, cycleId, editingLessonId || 'new', 'materi
                       title: '',
                       description: '',
                       dueDate: '',
-                      templateDocUrl: ''
+                      content: {
+                        template: '',
+                        studentContent: ''
+                      }
                     }
                   });
                   setEditingLessonId(lesson.id);
