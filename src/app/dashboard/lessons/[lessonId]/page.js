@@ -114,10 +114,10 @@ const StudentLessonPage = () => {
     try {
       if (!assignment?.id) return;
 
-      let newStatus;
-      let statusText;
+      let newStatus = 'submitted';
+      let statusText = 'הוגש לבדיקה';
       
-      if (assignment.status === 'new') {
+      if (assignment.status === 'new' || !assignment.status) {
         newStatus = 'submitted';
         statusText = 'הוגש לבדיקה';
       } else if (assignment.status === 'feedback' || assignment.status === 'needs_revision') {
