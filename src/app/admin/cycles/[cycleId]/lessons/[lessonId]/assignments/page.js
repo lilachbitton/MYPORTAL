@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { db } from '@/firebase/config';
 import { 
   collection, 
   getDocs, 
@@ -12,6 +11,7 @@ import {
   query, 
   where 
 } from "firebase/firestore";
+import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
 import ChatComponent from '@/components/ChatComponent';
 
@@ -30,7 +30,8 @@ const AssignmentsPage = () => {
   const [showResponseModal, setShowResponseModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
-useEffect(() => {
+
+  useEffect(() => {
     if (lessonId && cycleId) {
       fetchLessonDetails();
     }
@@ -106,7 +107,9 @@ useEffect(() => {
                   template: lessonData.assignment.content.template,
                   studentContent: ""
                 },
+                // בסטטוס התלמיד תישמר "feedback" כאשר המורה יעדכן ל-"completed" או "revision"
                 status: "pending",
+                teacherStatus: "pending",
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
               };
@@ -153,6 +156,18 @@ useEffect(() => {
         }
       }
 
+      // הוספת מידע צ'אט - אינדיקציה להודעות חדשות מצד המורה
+      for (const assignment of assignmentsData) {
+        const chatRef = doc(db, 'chats', assignment.id);
+        const chatDoc = await getDoc(chatRef);
+        if (chatDoc.exists()) {
+          const chatData = chatDoc.data();
+          assignment.unreadMessages = chatData.unreadCount?.teacher || 0;
+        } else {
+          assignment.unreadMessages = 0;
+        }
+      }
+
       setAssignments(assignmentsData);
 
     } catch (error) {
@@ -160,12 +175,14 @@ useEffect(() => {
       setError("שגיאה בטעינת מטלות התלמידים");
     }
   };
-const updateAssignmentStatus = async (assignmentId, newStatus) => {
+
+  const updateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
       setLoading(true);
       setError(null);
 
-      // המרת סטטוסים מצד המורה לצד התלמיד
+      // המרת סטטוסים מצד המורה לצד התלמיד:
+      // כאשר המורה בוחר "completed" או "revision" – הצד של התלמיד יקבל "feedback"
       let studentStatus = newStatus;
       if (newStatus === "completed" || newStatus === "revision") {
         studentStatus = "feedback";
@@ -226,7 +243,13 @@ const updateAssignmentStatus = async (assignmentId, newStatus) => {
     }
   };
 
-  const getStatusBadgeClass = (status) => {
+  // עדכון פונקציות סטטוס עבור צד המורה
+  const getStatusBadgeClass = (status, teacherStatus) => {
+    if (status === 'feedback') {
+      return teacherStatus === 'completed'
+        ? 'px-2 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800'
+        : 'px-2 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800';
+    }
     const classes = {
       "pending": "bg-gray-100 text-gray-800",
       "submitted": "bg-yellow-100 text-yellow-800",
@@ -237,7 +260,10 @@ const updateAssignmentStatus = async (assignmentId, newStatus) => {
     return `px-2 py-1 rounded-full text-sm font-medium ${classes[status] || classes.pending}`;
   };
 
-  const getStatusText = (status) => {
+  const getStatusText = (status, teacherStatus) => {
+    if (status === 'feedback') {
+      return teacherStatus === 'completed' ? 'הושלם' : 'נדרש תיקון';
+    }
     const texts = {
       "pending": "טרם הוגש",
       "submitted": "ממתין לבדיקה",
@@ -279,7 +305,8 @@ const updateAssignmentStatus = async (assignmentId, newStatus) => {
       return aValue < bValue ? 1 : -1;
     });
   };
-if (loading) {
+
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
@@ -324,7 +351,7 @@ if (loading) {
                 תאריך הגשה: {new Date(lesson.assignment.dueDate).toLocaleDateString("he-IL")}
               </p>
             )}
-{lesson.assignment.content?.template && (
+            {lesson.assignment.content?.template && (
               <div className="mt-4">
                 <h3 className="text-md font-semibold mb-2">תוכן המטלה:</h3>
                 <div className="bg-white p-4 rounded border max-h-40 overflow-y-auto">
@@ -400,9 +427,9 @@ if (loading) {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <select
-                    value={assignment.status}
+                    value={assignment.teacherStatus || assignment.status}
                     onChange={(e) => updateAssignmentStatus(assignment.id, e.target.value)}
-                    className={`${getStatusBadgeClass(assignment.status)} border-0 cursor-pointer w-full`}
+                    className={`${getStatusBadgeClass(assignment.status, assignment.teacherStatus)} border-0 cursor-pointer w-full`}
                     disabled={loading}
                   >
                     <option value="pending">טרם הוגש</option>
@@ -416,7 +443,7 @@ if (loading) {
                   {assignment.updatedAt ? new Date(assignment.updatedAt).toLocaleDateString('he-IL') : '-'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
-                  <div className="flex space-x-2 justify-end">
+                  <div className="flex space-x-2 justify-end relative">
                     {assignment.content?.studentContent && (
                       <button
                         onClick={() => {
@@ -434,10 +461,15 @@ if (loading) {
                         setSelectedAssignment(assignment);
                         setShowChatModal(true);
                       }}
-                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:border-purple-700 focus:shadow-outline-purple active:bg-purple-800 transition duration-150 ease-in-out"
+                      className="relative inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:border-purple-700 focus:shadow-outline-purple active:bg-purple-800 transition duration-150 ease-in-out"
                       disabled={loading}
                     >
                       צ'אט
+                      {assignment.unreadMessages > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                          {assignment.unreadMessages}
+                        </span>
+                      )}
                     </button>
                   </div>
                 </td>
@@ -501,9 +533,9 @@ if (loading) {
                 </div>
                 <div className="space-x-2">
                   <select
-                    value={selectedAssignment.status}
+                    value={selectedAssignment.teacherStatus || selectedAssignment.status}
                     onChange={(e) => updateAssignmentStatus(selectedAssignment.id, e.target.value)}
-                    className={`${getStatusBadgeClass(selectedAssignment.status)} border-0 cursor-pointer`}
+                    className={`${getStatusBadgeClass(selectedAssignment.status, selectedAssignment.teacherStatus)} border-0 cursor-pointer`}
                   >
                     <option value="pending">טרם הוגש</option>
                     <option value="submitted">ממתין לבדיקה</option>
