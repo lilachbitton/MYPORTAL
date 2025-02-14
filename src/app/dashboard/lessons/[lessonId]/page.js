@@ -120,7 +120,6 @@ const StudentLessonPage = () => {
       case 'resubmitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
       default: return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
     }
-    }
   };
 
   const getStatusText = (status) => {
@@ -132,7 +131,6 @@ const StudentLessonPage = () => {
       case 'revision': return 'לאחר משוב';
       case 'resubmitted': return 'נשלח לבדיקה מחדש';
       default: return 'חדש';
-    }
     }
   };
 
