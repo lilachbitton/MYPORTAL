@@ -13,6 +13,7 @@ import {
   where 
 } from "firebase/firestore";
 import SimpleEditor from '@/components/SimpleEditor';
+import ChatComponent from '@/components/ChatComponent';
 
 const AssignmentsPage = () => {
   const params = useParams();
@@ -20,16 +21,16 @@ const AssignmentsPage = () => {
   
   const [lesson, setLesson] = useState(null);
   const [assignments, setAssignments] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState(null);
   const [showResponseModal, setShowResponseModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
-
-  useEffect(() => {
+  const [showChatModal, setShowChatModal] = useState(false);
+useEffect(() => {
     if (lessonId && cycleId) {
       fetchLessonDetails();
     }
@@ -46,11 +47,11 @@ const AssignmentsPage = () => {
         setLesson(lessonData);
         await fetchAssignments(lessonData);
       } else {
-        throw new Error('השיעור לא נמצא');
+        throw new Error("השיעור לא נמצא");
       }
     } catch (error) {
       console.error("שגיאה בטעינת פרטי השיעור:", error);
-      setError('שגיאה בטעינת פרטי השיעור');
+      setError("שגיאה בטעינת פרטי השיעור");
     } finally {
       setLoading(false);
     }
@@ -94,19 +95,18 @@ const AssignmentsPage = () => {
           // יצירת מטלה חדשה לתלמיד
           const createAssignmentPromise = async () => {
             try {
-              // יצירת רשומת המטלה בפיירבייס
               const assignmentData = {
                 lessonId,
                 cycleId,
                 studentId: student.id,
-                title: lessonData.assignment.title || '',
-                description: lessonData.assignment.description || '',
-                dueDate: lessonData.assignment.dueDate || '',
+                title: lessonData.assignment.title || "",
+                description: lessonData.assignment.description || "",
+                dueDate: lessonData.assignment.dueDate || "",
                 content: {
                   template: lessonData.assignment.content.template,
-                  studentContent: ''  // התוכן של התלמיד מתחיל ריק
+                  studentContent: ""
                 },
-                status: 'pending',
+                status: "pending",
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
               };
@@ -114,12 +114,12 @@ const AssignmentsPage = () => {
               const newAssignmentRef = await addDoc(collection(db, "assignments"), assignmentData);
 
               // שליחת מייל לתלמיד
-              await fetch('/api/sendEmail', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+              await fetch("/api/sendEmail", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   to: student.email,
-                  subject: 'מטלה חדשה זמינה',
+                  subject: "מטלה חדשה זמינה",
                   text: `שלום ${student.fullName},\n\nמטלה חדשה בשיעור "${lessonData.title}" זמינה עבורך.\nאנא היכנס/י לפורטל לצפייה במטלה.\n\nבהצלחה!`,
                   username: student.email
                 }),
@@ -141,7 +141,6 @@ const AssignmentsPage = () => {
         }
       }
 
-      // המתנה שכל המטלות ייווצרו
       if (assignmentCreationPromises.length > 0) {
         try {
           await Promise.all(assignmentCreationPromises);
@@ -150,7 +149,7 @@ const AssignmentsPage = () => {
           setTimeout(() => setShowSuccessAlert(false), 3000);
         } catch (error) {
           console.error("Error creating assignments:", error);
-          setError('שגיאה ביצירת חלק מהמטלות');
+          setError("שגיאה ביצירת חלק מהמטלות");
         }
       }
 
@@ -158,56 +157,52 @@ const AssignmentsPage = () => {
 
     } catch (error) {
       console.error("שגיאה בטעינת מטלות:", error);
-      setError('שגיאה בטעינת מטלות התלמידים');
+      setError("שגיאה בטעינת מטלות התלמידים");
     }
   };
-  const updateAssignmentStatus = async (assignmentId, newStatus) => {
+const updateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
       setLoading(true);
       setError(null);
 
       // המרת סטטוסים מצד המורה לצד התלמיד
       let studentStatus = newStatus;
-      if (newStatus === 'completed' || newStatus === 'revision') {
-        studentStatus = 'feedback';
+      if (newStatus === "completed" || newStatus === "revision") {
+        studentStatus = "feedback";
       }
 
       await updateDoc(doc(db, "assignments", assignmentId), {
         status: studentStatus,
-        teacherStatus: newStatus, // שמירת הסטטוס המקורי של המורה
+        teacherStatus: newStatus,
         updatedAt: new Date().toISOString()
       });
-      await updateDoc(doc(db, "assignments", assignmentId), {
-        status: studentStatus,
-        teacherStatus: newStatus, // שמירת הסטטוס המקורי של המורה
-        updatedAt: new Date().toISOString()
-      });      
+
       const assignment = assignments.find(a => a.id === assignmentId);
       
       // שליחת מייל לתלמיד בהתאם לסטטוס
       if (assignment?.student?.email) {
-        let emailSubject = '';
-        let emailText = '';
+        let emailSubject = "";
+        let emailText = "";
 
         switch (newStatus) {
-          case 'completed':
-            emailSubject = 'המטלה שלך נבדקה ואושרה';
+          case "completed":
+            emailSubject = "המטלה שלך נבדקה ואושרה";
             emailText = `שלום ${assignment.student.fullName},\n\nהמטלה שהגשת בשיעור "${lesson?.title}" נבדקה ואושרה.\nכל הכבוד!`;
             break;
-          case 'revision':
-            emailSubject = 'נדרשים תיקונים במטלה שהגשת';
+          case "revision":
+            emailSubject = "נדרשים תיקונים במטלה שהגשת";
             emailText = `שלום ${assignment.student.fullName},\n\nהמטלה שהגשת בשיעור "${lesson?.title}" נבדקה ונדרשים מספר תיקונים.\nאנא בדוק/י את ההערות במסמך ובצע/י את התיקונים הנדרשים.`;
             break;
-          case 'review':
-            emailSubject = 'המטלה שלך התקבלה ונמצאת בבדיקה';
+          case "review":
+            emailSubject = "המטלה שלך התקבלה ונמצאת בבדיקה";
             emailText = `שלום ${assignment.student.fullName},\n\nהמטלה שהגשת בשיעור "${lesson?.title}" התקבלה ונמצאת בבדיקה.\nניצור איתך קשר בהקדם.`;
             break;
         }
 
         if (emailSubject && emailText) {
-          await fetch('/api/sendEmail', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+          await fetch("/api/sendEmail", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: assignment.student.email,
               subject: emailSubject,
@@ -218,14 +213,14 @@ const AssignmentsPage = () => {
         }
       }
 
-      setSuccessMessage('סטטוס המטלה עודכן בהצלחה');
+      setSuccessMessage("סטטוס המטלה עודכן בהצלחה");
       setShowSuccessAlert(true);
       setTimeout(() => setShowSuccessAlert(false), 3000);
 
       await fetchLessonDetails();
     } catch (error) {
       console.error("שגיאה בעדכון סטטוס המטלה:", error);
-      setError('שגיאה בעדכון סטטוס המטלה');
+      setError("שגיאה בעדכון סטטוס המטלה");
     } finally {
       setLoading(false);
     }
@@ -233,30 +228,30 @@ const AssignmentsPage = () => {
 
   const getStatusBadgeClass = (status) => {
     const classes = {
-      'pending': 'bg-gray-100 text-gray-800',
-      'submitted': 'bg-yellow-100 text-yellow-800',
-      'review': 'bg-blue-100 text-blue-800',
-      'completed': 'bg-green-100 text-green-800',
-      'revision': 'bg-red-100 text-red-800'
+      "pending": "bg-gray-100 text-gray-800",
+      "submitted": "bg-yellow-100 text-yellow-800",
+      "review": "bg-blue-100 text-blue-800",
+      "completed": "bg-green-100 text-green-800",
+      "revision": "bg-red-100 text-red-800"
     };
     return `px-2 py-1 rounded-full text-sm font-medium ${classes[status] || classes.pending}`;
   };
 
   const getStatusText = (status) => {
     const texts = {
-      'pending': 'טרם הוגש',
-      'submitted': 'ממתין לבדיקה',
-      'review': 'בבדיקה',
-      'completed': 'הושלם',
-      'revision': 'נדרש תיקון'
+      "pending": "טרם הוגש",
+      "submitted": "ממתין לבדיקה",
+      "review": "בבדיקה",
+      "completed": "הושלם",
+      "revision": "נדרש תיקון"
     };
-    return texts[status] || 'טרם הוגש';
+    return texts[status] || "טרם הוגש";
   };
 
   const sortBy = (key) => {
-    let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
+    let direction = "ascending";
+    if (sortConfig.key === key && sortConfig.direction === "ascending") {
+      direction = "descending";
     }
     setSortConfig({ key, direction });
   };
@@ -270,23 +265,21 @@ const AssignmentsPage = () => {
     if (!sortConfig.key) return filtered;
 
     return [...filtered].sort((a, b) => {
-      let aValue = a.student?.[sortConfig.key] || '';
-      let bValue = b.student?.[sortConfig.key] || '';
+      let aValue = a.student?.[sortConfig.key] || "";
+      let bValue = b.student?.[sortConfig.key] || "";
       
-      if (sortConfig.key === 'status') {
-        aValue = a[sortConfig.key] || '';
-        bValue = b[sortConfig.key] || '';
+      if (sortConfig.key === "status") {
+        aValue = a[sortConfig.key] || "";
+        bValue = b[sortConfig.key] || "";
       }
 
-      if (sortConfig.direction === 'ascending') {
+      if (sortConfig.direction === "ascending") {
         return aValue > bValue ? 1 : -1;
       }
       return aValue < bValue ? 1 : -1;
     });
   };
-
-  // Render component
-  if (loading) {
+if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
@@ -308,7 +301,7 @@ const AssignmentsPage = () => {
     return <div className="p-4 text-center">לא נמצא שיעור</div>;
   }
 
-  return  (
+  return (
     <div className="p-4" dir="rtl">
       {showSuccessAlert && (
         <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50">
@@ -328,10 +321,10 @@ const AssignmentsPage = () => {
             )}
             {lesson.assignment.dueDate && (
               <p className="text-gray-600 mt-2">
-                תאריך הגשה: {new Date(lesson.assignment.dueDate).toLocaleDateString('he-IL')}
+                תאריך הגשה: {new Date(lesson.assignment.dueDate).toLocaleDateString("he-IL")}
               </p>
             )}
-            {lesson.assignment.content?.template && (
+{lesson.assignment.content?.template && (
               <div className="mt-4">
                 <h3 className="text-md font-semibold mb-2">תוכן המטלה:</h3>
                 <div className="bg-white p-4 rounded border max-h-40 overflow-y-auto">
@@ -424,7 +417,6 @@ const AssignmentsPage = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
                   <div className="flex space-x-2 justify-end">
-                    {/* כפתור לצפייה בתשובת התלמיד */}
                     {assignment.content?.studentContent && (
                       <button
                         onClick={() => {
@@ -437,9 +429,11 @@ const AssignmentsPage = () => {
                       </button>
                     )}
                     
-                    {/* כפתור לצ'אט */}
                     <button
-                      onClick={() => window.location.href = `/admin/cycles/${cycleId}/lessons/${lessonId}/assignments/${assignment.id}/chat`}
+                      onClick={() => {
+                        setSelectedAssignment(assignment);
+                        setShowChatModal(true);
+                      }}
                       className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:border-purple-700 focus:shadow-outline-purple active:bg-purple-800 transition duration-150 ease-in-out"
                       disabled={loading}
                     >
@@ -520,6 +514,31 @@ const AssignmentsPage = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* מודל הצ'אט */}
+      {showChatModal && selectedAssignment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-2xl mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold">צ'אט עם {selectedAssignment.student?.fullName}</h3>
+              <button
+                onClick={() => {
+                  setShowChatModal(false);
+                  setSelectedAssignment(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <ChatComponent
+              assignmentId={selectedAssignment.id}
+              currentUserId="admin"
+              userRole="teacher"
+            />
           </div>
         </div>
       )}
