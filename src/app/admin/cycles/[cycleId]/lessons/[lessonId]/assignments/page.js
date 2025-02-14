@@ -161,8 +161,7 @@ const AssignmentsPage = () => {
       setError('שגיאה בטעינת מטלות התלמידים');
     }
   };
-
-const updateAssignmentStatus = async (assignmentId, newStatus) => {
+  const updateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
       setLoading(true);
       setError(null);
@@ -173,6 +172,11 @@ const updateAssignmentStatus = async (assignmentId, newStatus) => {
         studentStatus = 'feedback';
       }
 
+      await updateDoc(doc(db, "assignments", assignmentId), {
+        status: studentStatus,
+        teacherStatus: newStatus, // שמירת הסטטוס המקורי של המורה
+        updatedAt: new Date().toISOString()
+      });
       await updateDoc(doc(db, "assignments", assignmentId), {
         status: studentStatus,
         teacherStatus: newStatus, // שמירת הסטטוס המקורי של המורה
