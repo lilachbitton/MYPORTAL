@@ -60,6 +60,17 @@ const StudentLessonPage = () => {
           id: assignmentsSnapshot.docs[0].id,
           ...assignmentsSnapshot.docs[0].data()
         };
+
+        // קבלת מידע הצ'אט (כמות הודעות לא נקראות)
+        const chatRef = doc(db, 'chats', assignmentData.id);
+        const chatDoc = await getDoc(chatRef);
+        if (chatDoc.exists()) {
+          const chatData = chatDoc.data();
+          assignmentData.unreadMessages = chatData.unreadCount?.student || 0;
+        } else {
+          assignmentData.unreadMessages = 0;
+        }
+
         setAssignment(assignmentData);
         
         setEditHistory([
@@ -111,7 +122,8 @@ const StudentLessonPage = () => {
       setError('שגיאה בשמירת התוכן');
     }
   };
-const handleSubmitAssignment = async () => {
+
+  const handleSubmitAssignment = async () => {
     try {
       if (!assignment?.id) return;
 
@@ -198,7 +210,8 @@ const handleSubmitAssignment = async () => {
     if (daysUntilDue <= 7) return { text: `נותרו ${daysUntilDue} ימים להגשה`, color: 'text-orange-600' };
     return null;
   };
-if (loading) {
+
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-orange-500"></div>
@@ -355,7 +368,7 @@ if (loading) {
               />
             </div>
 
-            <div className="mt-8 flex justify-start gap-4">
+            <div className="mt-8 flex justify-start">
               {canEdit && (
                 <button
                   onClick={() => setShowSubmitModal(true)}
@@ -364,12 +377,6 @@ if (loading) {
                   {isAfterFeedback ? 'הגש לבדיקה חוזרת' : 'הגש לבדיקה'}
                 </button>
               )}
-              <button
-                onClick={() => setShowChatModal(true)}
-                className="px-8 py-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 font-semibold"
-              >
-                צ'אט עם המורה
-              </button>
             </div>
 
             {assignment.teacherFeedback && (
@@ -456,6 +463,21 @@ if (loading) {
           </div>
         )}
       </div>
+
+      {/* כפתור צ'אט צף */}
+      {assignment && (
+        <button
+          onClick={() => setShowChatModal(true)}
+          className="fixed bottom-8 right-8 z-40 px-6 py-3 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 font-semibold flex items-center gap-2"
+        >
+          <span>צ'אט עם המורה</span>
+          {assignment.unreadMessages > 0 && (
+            <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              {assignment.unreadMessages}
+            </span>
+          )}
+        </button>
+      )}
     </div>
   );
 };
