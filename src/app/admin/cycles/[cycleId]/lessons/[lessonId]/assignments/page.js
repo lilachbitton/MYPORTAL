@@ -9,7 +9,8 @@ import {
   getDoc, 
   updateDoc, 
   query, 
-  where 
+  where,
+  onSnapshot 
 } from "firebase/firestore";
 import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
@@ -19,6 +20,7 @@ const AssignmentsPage = () => {
   const params = useParams();
   const { cycleId, lessonId } = params;
   
+  // הגדרות state
   const [lesson, setLesson] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -30,11 +32,17 @@ const AssignmentsPage = () => {
   const [showResponseModal, setShowResponseModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [chatListeners, setChatListeners] = useState([]);
 
   useEffect(() => {
     if (lessonId && cycleId) {
       fetchLessonDetails();
     }
+
+    // ניקוי מאזינים (listeners) בעת unmount או שינוי תלות
+    return () => {
+      chatListeners.forEach(unsubscribe => unsubscribe());
+    };
   }, [lessonId, cycleId]);
 
   const fetchLessonDetails = async () => {
@@ -135,7 +143,7 @@ const AssignmentsPage = () => {
               });
 
             } catch (error) {
-              console.error(`Error creating assignment for student ${student.fullName}:`, error);
+              console.error(`שגיאה ביצירת מטלה לתלמיד ${student.fullName}:`, error);
               throw error;
             }
           };
@@ -151,12 +159,12 @@ const AssignmentsPage = () => {
           setShowSuccessAlert(true);
           setTimeout(() => setShowSuccessAlert(false), 3000);
         } catch (error) {
-          console.error("Error creating assignments:", error);
+          console.error("שגיאה ביצירת מטלות:", error);
           setError("שגיאה ביצירת חלק מהמטלות");
         }
       }
 
-      // הוספת מידע צ'אט - אינדיקציה להודעות חדשות מצד המורה
+      // הגדרת נתוני צ'אט ראשוניים
       for (const assignment of assignmentsData) {
         const chatRef = doc(db, 'chats', assignment.id);
         const chatDoc = await getDoc(chatRef);
@@ -169,11 +177,42 @@ const AssignmentsPage = () => {
       }
 
       setAssignments(assignmentsData);
+      
+      // הקמת מאזיני צ'אט בזמן אמת
+      setupChatListeners(assignmentsData);
 
     } catch (error) {
       console.error("שגיאה בטעינת מטלות:", error);
       setError("שגיאה בטעינת מטלות התלמידים");
     }
+  };
+
+  const setupChatListeners = (assignmentsData) => {
+    // ניקוי מאזינים קיימים
+    chatListeners.forEach(unsubscribe => unsubscribe());
+    const newListeners = [];
+
+    assignmentsData.forEach(assignment => {
+      const chatRef = doc(db, 'chats', assignment.id);
+      const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const chatData = docSnapshot.data();
+          setAssignments(prevAssignments => 
+            prevAssignments.map(prevAssignment => 
+              prevAssignment.id === assignment.id
+                ? { ...prevAssignment, unreadMessages: chatData.unreadCount?.teacher || 0 }
+                : prevAssignment
+            )
+          );
+        }
+      }, (error) => {
+        console.error("שגיאה במאזין הצ'אט:", error);
+      });
+
+      newListeners.push(unsubscribe);
+    });
+
+    setChatListeners(newListeners);
   };
 
   const updateAssignmentStatus = async (assignmentId, newStatus) => {
@@ -243,7 +282,6 @@ const AssignmentsPage = () => {
     }
   };
 
-  // עדכון פונקציות סטטוס עבור צד המורה
   const getStatusBadgeClass = (status, teacherStatus) => {
     if (status === 'feedback') {
       return teacherStatus === 'completed'
@@ -304,6 +342,30 @@ const AssignmentsPage = () => {
       }
       return aValue < bValue ? 1 : -1;
     });
+  };
+
+  const handleCloseChatModal = async () => {
+    if (selectedAssignment) {
+      try {
+        const chatRef = doc(db, 'chats', selectedAssignment.id);
+        await updateDoc(chatRef, {
+          'unreadCount.teacher': 0
+        });
+        
+        // עדכון state מקומי
+        setAssignments(prevAssignments =>
+          prevAssignments.map(assignment =>
+            assignment.id === selectedAssignment.id
+              ? { ...assignment, unreadMessages: 0 }
+              : assignment
+          )
+        );
+      } catch (error) {
+        console.error("שגיאה באיפוס ספירת ההודעות שלא נקראו:", error);
+      }
+    }
+    setShowChatModal(false);
+    setSelectedAssignment(null);
   };
 
   if (loading) {
@@ -387,22 +449,19 @@ const AssignmentsPage = () => {
                 className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => sortBy('fullName')}
               >
-                שם התלמיד 
-                {sortConfig.key === 'fullName' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
+                שם התלמיד {sortConfig.key === 'fullName' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </th>
               <th 
                 className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => sortBy('email')}
               >
-                אימייל
-                {sortConfig.key === 'email' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
+                אימייל {sortConfig.key === 'email' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </th>
               <th 
                 className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => sortBy('status')}
               >
-                סטטוס
-                {sortConfig.key === 'status' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
+                סטטוס {sortConfig.key === 'status' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 תאריך עדכון
@@ -557,10 +616,7 @@ const AssignmentsPage = () => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold">צ'אט עם {selectedAssignment.student?.fullName}</h3>
               <button
-                onClick={() => {
-                  setShowChatModal(false);
-                  setSelectedAssignment(null);
-                }}
+                onClick={handleCloseChatModal}
                 className="text-gray-500 hover:text-gray-700"
               >
                 ✕
