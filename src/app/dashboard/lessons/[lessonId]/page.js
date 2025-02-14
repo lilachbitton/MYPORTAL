@@ -95,7 +95,7 @@ const StudentLessonPage = () => {
 
       await updateDoc(doc(db, "assignments", assignment.id), {
         'content.studentContent': newContent,
-        status: 'draft',
+        status: assignment.status === 'feedback' ? 'new' : 'new',
         updatedAt: new Date().toISOString(),
         editHistory: [...(assignment.editHistory || []), newHistoryEntry]
       });
@@ -115,26 +115,27 @@ const StudentLessonPage = () => {
     try {
       if (!assignment?.id) return;
 
+      const newStatus = assignment.status === 'feedback' ? 'resubmitted' : 'submitted';
       const newHistoryEntry = {
         date: new Date().toISOString(),
         type: 'submitted',
-        status: 'הוגש לבדיקה'
+        status: newStatus === 'resubmitted' ? 'נשלח לבדיקה מחדש' : 'הוגש לבדיקה'
       };
 
       await updateDoc(doc(db, "assignments", assignment.id), {
-        status: 'submitted',
+        status: newStatus,
         updatedAt: new Date().toISOString(),
         editHistory: [...(assignment.editHistory || []), newHistoryEntry]
       });
 
       setEditHistory(prev => [newHistoryEntry, ...prev]);
-      setSuccessMessage('המטלה נשלחה לבדיקה');
+      setSuccessMessage(newStatus === 'resubmitted' ? 'המטלה נשלחה לבדיקה מחדש' : 'המטלה נשלחה לבדיקה');
       setShowSuccessAlert(true);
       setTimeout(() => setShowSuccessAlert(false), 3000);
       
       setAssignment(prev => ({
         ...prev,
-        status: 'submitted'
+        status: newStatus
       }));
       setShowSubmitModal(false);
 
@@ -146,11 +147,9 @@ const StudentLessonPage = () => {
 
   const getStatusColor = (status) => {
     switch(status) {
-      case 'pending': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+      case 'new': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
       case 'submitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
-      case 'review': return 'bg-purple-100 text-purple-800 border border-purple-300';
-      case 'completed': return 'bg-orange-100 text-orange-800 border border-orange-300';
-      case 'revision': return 'bg-orange-100 text-orange-800 border border-orange-300';
+      case 'feedback': return 'bg-orange-100 text-orange-800 border border-orange-300';
       case 'resubmitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
       default: return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
     }
@@ -158,11 +157,9 @@ const StudentLessonPage = () => {
 
   const getStatusText = (status) => {
     switch(status) {
-      case 'pending': return 'חדש';
+      case 'new': return 'חדש';
       case 'submitted': return 'הוגש לבדיקה';
-      case 'review': return 'בבדיקה';
-      case 'completed': return 'לאחר משוב';
-      case 'revision': return 'לאחר משוב';
+      case 'feedback': return 'לאחר משוב';
       case 'resubmitted': return 'נשלח לבדיקה מחדש';
       default: return 'חדש';
     }
@@ -207,7 +204,8 @@ if (loading) {
     return <div className="p-4 text-center">לא נמצא שיעור</div>;
   }
 
-  const isSubmitted = ['submitted', 'review', 'completed', 'revision', 'resubmitted'].includes(assignment?.status);
+  const isSubmitted = ['submitted', 'resubmitted'].includes(assignment?.status);
+  const isAfterFeedback = assignment?.status === 'feedback';
 
   return (
     <div className="min-h-screen rtl bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
@@ -340,13 +338,13 @@ if (loading) {
               />
             </div>
 
-            {!isSubmitted && (
+            {(!isSubmitted) && (
               <div className="mt-8 flex justify-start">
                 <button
                   onClick={() => setShowSubmitModal(true)}
                   className="px-8 py-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 font-semibold"
                 >
-                  הגש לבדיקה
+                  {isAfterFeedback ? 'הגש לבדיקה חוזרת' : 'הגש לבדיקה'}
                 </button>
               </div>
             )}
@@ -372,7 +370,7 @@ if (loading) {
                   onClick={handleSubmitAssignment}
                   className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
                 >
-                  אישור הגשה
+                  {isAfterFeedback ? 'אישור הגשה חוזרת' : 'אישור הגשה'}
                 </button>
               </div>
             </div>
