@@ -59,6 +59,7 @@ const StudentLessonPage = () => {
           ...assignmentsSnapshot.docs[0].data()
         };
         setAssignment(assignmentData);
+        
         // קבלת היסטוריית העריכות
         setEditHistory([
           { 
@@ -115,10 +116,12 @@ const StudentLessonPage = () => {
       if (!assignment?.id) return;
 
       const newStatus = assignment.status === 'feedback' ? 'resubmitted' : 'submitted';
+      const statusText = newStatus === 'resubmitted' ? 'נשלח לבדיקה מחדש' : 'הוגש לבדיקה';
+
       const newHistoryEntry = {
         date: new Date().toISOString(),
         type: 'submitted',
-        status: newStatus === 'resubmitted' ? 'נשלח לבדיקה מחדש' : 'הוגש לבדיקה'
+        status: statusText
       };
 
       await updateDoc(doc(db, "assignments", assignment.id), {
@@ -128,7 +131,7 @@ const StudentLessonPage = () => {
       });
 
       setEditHistory(prev => [newHistoryEntry, ...prev]);
-      setSuccessMessage(newStatus === 'resubmitted' ? 'המטלה נשלחה לבדיקה מחדש' : 'המטלה נשלחה לבדיקה');
+      setSuccessMessage(statusText);
       setShowSuccessAlert(true);
       setTimeout(() => setShowSuccessAlert(false), 3000);
       
