@@ -60,7 +60,6 @@ const StudentLessonPage = () => {
         };
         setAssignment(assignmentData);
         
-        // קבלת היסטוריית העריכות
         setEditHistory([
           { 
             date: assignmentData.createdAt, 
@@ -115,8 +114,16 @@ const StudentLessonPage = () => {
     try {
       if (!assignment?.id) return;
 
-      const newStatus = assignment.status === 'feedback' ? 'resubmitted' : 'submitted';
-      const statusText = newStatus === 'resubmitted' ? 'נשלח לבדיקה מחדש' : 'הוגש לבדיקה';
+      let newStatus;
+      let statusText;
+      
+      if (assignment.status === 'new') {
+        newStatus = 'submitted';
+        statusText = 'הוגש לבדיקה';
+      } else if (assignment.status === 'feedback' || assignment.status === 'needs_revision') {
+        newStatus = 'resubmitted';
+        statusText = 'הוגש לבדיקה חוזרת';
+      }
 
       const newHistoryEntry = {
         date: new Date().toISOString(),
@@ -152,7 +159,9 @@ const StudentLessonPage = () => {
       case 'new': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
       case 'submitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
       case 'feedback': return 'bg-orange-100 text-orange-800 border border-orange-300';
-      case 'resubmitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
+      case 'resubmitted': return 'bg-purple-100 text-purple-800 border border-purple-300';
+      case 'completed': return 'bg-green-100 text-green-800 border border-green-300';
+      case 'needs_revision': return 'bg-yellow-100 text-yellow-800 border border-yellow-300';
       default: return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
     }
   };
@@ -160,14 +169,15 @@ const StudentLessonPage = () => {
   const getStatusText = (status) => {
     switch(status) {
       case 'new': return 'חדש';
-      case 'submitted': return 'הוגש לבדיקה';
+      case 'submitted': return 'ממתין לבדיקה';
       case 'feedback': return 'לאחר משוב';
-      case 'resubmitted': return 'נשלח לבדיקה מחדש';
+      case 'resubmitted': return 'הוגש לבדיקה חוזרת';
+      case 'completed': return 'הושלם';
+      case 'needs_revision': return 'נדרש תיקון';
       default: return 'חדש';
     }
   };
-
-  const getDaysUntilDue = () => {
+const getDaysUntilDue = () => {
     if (!assignment?.dueDate) return null;
     const dueDate = new Date(assignment.dueDate);
     const today = new Date();
@@ -184,7 +194,8 @@ const StudentLessonPage = () => {
     if (daysUntilDue <= 7) return { text: `נותרו ${daysUntilDue} ימים להגשה`, color: 'text-orange-600' };
     return null;
   };
-if (loading) {
+
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-orange-500"></div>
@@ -206,9 +217,9 @@ if (loading) {
     return <div className="p-4 text-center">לא נמצא שיעור</div>;
   }
 
-  const isSubmitted = ['submitted', 'resubmitted'].includes(assignment?.status);
-  const isAfterFeedback = assignment?.status === 'feedback';
-  const canEdit = !isSubmitted || isAfterFeedback;
+  const isSubmitted = ['submitted', 'resubmitted', 'completed'].includes(assignment?.status);
+  const isAfterFeedback = ['feedback', 'needs_revision'].includes(assignment?.status);
+  const canEdit = !isSubmitted && assignment?.status !== 'completed';
 
   return (
     <div className="min-h-screen rtl bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
@@ -347,8 +358,15 @@ if (loading) {
                   onClick={() => setShowSubmitModal(true)}
                   className="px-8 py-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 font-semibold"
                 >
-                  {isAfterFeedback ? 'הגשה חוזרת' : 'הגש לבדיקה'}
+                  {isAfterFeedback ? 'הגש לבדיקה חוזרת' : 'הגש לבדיקה'}
                 </button>
+              </div>
+            )}
+
+            {assignment.teacherFeedback && (
+              <div className="mt-6 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+                <h3 className="font-semibold text-lg mb-2">משוב מהמורה:</h3>
+                <p className="text-gray-700">{assignment.teacherFeedback}</p>
               </div>
             )}
           </div>
