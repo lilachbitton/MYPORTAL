@@ -17,7 +17,7 @@ import {
 
 const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
@@ -31,12 +31,12 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
       try {
         setLoading(true);
         // בדיקה אם קיים צ'אט למשימה זו
-        const chatRef = doc(db, 'chats', assignmentId);
+        const chatRef = doc(db, "chats", assignmentId);
         const chatDoc = await getDoc(chatRef);
 
         if (!chatDoc.exists()) {
           // יצירת צ'אט חדש
-          const assignmentRef = doc(db, 'assignments', assignmentId);
+          const assignmentRef = doc(db, "assignments", assignmentId);
           const assignmentDoc = await getDoc(assignmentRef);
           const assignmentData = assignmentDoc.data();
 
@@ -44,7 +44,7 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
             assignmentId,
             messages: [],
             participants: {
-              teacherId: assignmentData.teacherId || 'admin', // כרגע ברירת מחדל עד שנוסיף teacherId
+              teacherId: assignmentData.teacherId || "admin", // כרגע ברירת מחדל עד שנוסיף teacherId
               studentId: assignmentData.studentId
             },
             lastMessage: null,
@@ -77,7 +77,7 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
 
       } catch (error) {
         console.error("Error initializing chat:", error);
-        setError('שגיאה בטעינת הצ'אט');
+        setError("שגיאה בטעינת הצ'אט");
         setLoading(false);
       }
     };
@@ -92,7 +92,7 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
     if (!newMessage.trim()) return;
 
     try {
-      const chatRef = doc(db, 'chats', assignmentId);
+      const chatRef = doc(db, "chats", assignmentId);
       const chatDoc = await getDoc(chatRef);
       const chatData = chatDoc.data();
 
@@ -111,16 +111,16 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
           timestamp: message.timestamp,
           senderId: currentUserId
         },
-        [`unreadCount.${userRole === 'teacher' ? 'student' : 'teacher'}`]: 
-          (chatData?.unreadCount?.[userRole === 'teacher' ? 'student' : 'teacher'] || 0) + 1
+        [`unreadCount.${userRole === "teacher" ? "student" : "teacher"}`]: 
+          (chatData?.unreadCount?.[userRole === "teacher" ? "student" : "teacher"] || 0) + 1
       });
 
-      setNewMessage('');
+      setNewMessage("");
       scrollToBottom();
 
     } catch (error) {
       console.error("Error sending message:", error);
-      setError('שגיאה בשליחת ההודעה');
+      setError("שגיאה בשליחת ההודעה");
     }
   };
 
@@ -139,18 +139,18 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`flex ${message.senderId === currentUserId ? 'justify-end' : 'justify-start'}`}
+            className={`flex ${message.senderId === currentUserId ? "justify-end" : "justify-start"}`}
           >
             <div
               className={`max-w-[70%] p-3 rounded-lg ${
                 message.senderId === currentUserId
-                  ? 'bg-blue-500 text-white rounded-br-none'
-                  : 'bg-white text-gray-800 rounded-bl-none shadow'
+                  ? "bg-blue-500 text-white rounded-br-none"
+                  : "bg-white text-gray-800 rounded-bl-none shadow"
               }`}
             >
               <p className="text-sm">{message.content}</p>
               <span className="text-xs opacity-75 mt-1 block">
-                {new Date(message.timestamp).toLocaleTimeString('he-IL')}
+                {new Date(message.timestamp).toLocaleTimeString("he-IL")}
               </span>
             </div>
           </div>
