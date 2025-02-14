@@ -24,6 +24,9 @@ const StudentLessonPage = () => {
   const [studentId, setStudentId] = useState("eGjUZxKRfWTgViqjzpODAki1okA2");
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [editHistory, setEditHistory] = useState([]);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
   useEffect(() => {
     if (lessonId && studentId) {
@@ -56,6 +59,20 @@ const StudentLessonPage = () => {
           ...assignmentsSnapshot.docs[0].data()
         };
         setAssignment(assignmentData);
+        // קבלת היסטוריית העריכות
+        setEditHistory([
+          { 
+            date: assignmentData.createdAt, 
+            type: 'created', 
+            status: 'נוצר'
+          },
+          ...(assignmentData.editHistory || []),
+          ...(assignmentData.updatedAt !== assignmentData.createdAt ? [{
+            date: assignmentData.updatedAt,
+            type: 'edited',
+            status: 'נערך'
+          }] : [])
+        ].sort((a, b) => new Date(b.date) - new Date(a.date)));
       }
 
     } catch (error) {
@@ -70,12 +87,20 @@ const StudentLessonPage = () => {
     try {
       if (!assignment?.id) return;
 
+      const newHistoryEntry = {
+        date: new Date().toISOString(),
+        type: 'edited',
+        status: 'נערך'
+      };
+
       await updateDoc(doc(db, "assignments", assignment.id), {
         'content.studentContent': newContent,
         status: 'draft',
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        editHistory: [...(assignment.editHistory || []), newHistoryEntry]
       });
 
+      setEditHistory(prev => [newHistoryEntry, ...prev]);
       setSuccessMessage('התוכן נשמר בהצלחה');
       setShowSuccessAlert(true);
       setTimeout(() => setShowSuccessAlert(false), 3000);
@@ -90,11 +115,19 @@ const StudentLessonPage = () => {
     try {
       if (!assignment?.id) return;
 
+      const newHistoryEntry = {
+        date: new Date().toISOString(),
+        type: 'submitted',
+        status: 'הוגש לבדיקה'
+      };
+
       await updateDoc(doc(db, "assignments", assignment.id), {
         status: 'submitted',
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        editHistory: [...(assignment.editHistory || []), newHistoryEntry]
       });
 
+      setEditHistory(prev => [newHistoryEntry, ...prev]);
       setSuccessMessage('המטלה נשלחה לבדיקה');
       setShowSuccessAlert(true);
       setTimeout(() => setShowSuccessAlert(false), 3000);
@@ -103,6 +136,7 @@ const StudentLessonPage = () => {
         ...prev,
         status: 'submitted'
       }));
+      setShowSubmitModal(false);
 
     } catch (error) {
       console.error("שגיאה בהגשת המטלה:", error);
@@ -134,7 +168,24 @@ const StudentLessonPage = () => {
     }
   };
 
-  if (loading) {
+  const getDaysUntilDue = () => {
+    if (!assignment?.dueDate) return null;
+    const dueDate = new Date(assignment.dueDate);
+    const today = new Date();
+    const diffTime = dueDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getDueDateWarning = () => {
+    const daysUntilDue = getDaysUntilDue();
+    if (daysUntilDue === null) return null;
+    if (daysUntilDue < 0) return { text: 'חלף מועד ההגשה!', color: 'text-red-600 font-bold' };
+    if (daysUntilDue <= 2) return { text: `נותרו ${daysUntilDue} ימים להגשה!`, color: 'text-red-600' };
+    if (daysUntilDue <= 7) return { text: `נותרו ${daysUntilDue} ימים להגשה`, color: 'text-orange-600' };
+    return null;
+  };
+if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-orange-500"></div>
@@ -250,13 +301,28 @@ const StudentLessonPage = () => {
               <div className="text-right">
                 <h2 className="text-2xl font-bold mb-2">המשימה שלך</h2>
                 {assignment.dueDate && (
-                  <p className="text-gray-600">
-                    יש להגיש עד: {new Date(assignment.dueDate).toLocaleDateString('he-IL')}
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-gray-600">
+                      יש להגיש עד: {new Date(assignment.dueDate).toLocaleDateString('he-IL')}
+                    </p>
+                    {getDueDateWarning() && (
+                      <p className={getDueDateWarning().color}>
+                        {getDueDateWarning().text}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className={`px-6 py-3 rounded-full text-sm font-semibold ${getStatusColor(assignment.status)}`}>
-                {getStatusText(assignment.status)}
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setHistoryModalOpen(true)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  היסטוריית שינויים
+                </button>
+                <div className={`px-6 py-3 rounded-full text-sm font-semibold ${getStatusColor(assignment.status)}`}>
+                  {getStatusText(assignment.status)}
+                </div>
               </div>
             </div>
 
@@ -277,13 +343,66 @@ const StudentLessonPage = () => {
             {!isSubmitted && (
               <div className="mt-8 flex justify-start">
                 <button
-                  onClick={handleSubmitAssignment}
+                  onClick={() => setShowSubmitModal(true)}
                   className="px-8 py-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 font-semibold"
                 >
                   הגש לבדיקה
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* מודל אישור הגשה */}
+        {showSubmitModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full mx-4">
+              <h3 className="text-xl font-bold mb-4">אישור הגשת מטלה</h3>
+              <p className="mb-6 text-gray-600">
+                האם אתה בטוח שברצונך להגיש את המטלה? לאחר ההגשה לא ניתן יהיה לערוך את התוכן.
+              </p>
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => setShowSubmitModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  ביטול
+                </button>
+                <button
+                  onClick={handleSubmitAssignment}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                >
+                  אישור הגשה
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* מודל היסטוריית שינויים */}
+        {historyModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full mx-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">היסטוריית שינויים</h3>
+                <button
+                  onClick={() => setHistoryModalOpen(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {editHistory.map((entry, index) => (
+                  <div key={index} className="border-b pb-2">
+                    <p className="font-medium">{entry.status}</p>
+                    <p className="text-sm text-gray-500">
+                      {new Date(entry.date).toLocaleString('he-IL')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
