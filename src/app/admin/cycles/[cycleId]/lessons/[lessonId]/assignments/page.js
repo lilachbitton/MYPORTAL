@@ -9,7 +9,8 @@ import {
   getDoc, 
   updateDoc, 
   query, 
-  where 
+  where,
+  onSnapshot 
 } from "firebase/firestore";
 import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
@@ -30,11 +31,16 @@ const AssignmentsPage = () => {
   const [showResponseModal, setShowResponseModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [chatListeners, setChatListeners] = useState([]);
 
   useEffect(() => {
     if (lessonId && cycleId) {
       fetchLessonDetails();
     }
+    // Cleanup chat listeners when component unmounts or lessonId/cycleId change
+    return () => {
+      chatListeners.forEach(unsubscribe => unsubscribe());
+    };
   }, [lessonId, cycleId]);
 
   const fetchLessonDetails = async () => {
@@ -169,11 +175,40 @@ const AssignmentsPage = () => {
       }
 
       setAssignments(assignmentsData);
+      
+      // Setup real-time listeners for chat updates
+      setupChatListeners(assignmentsData);
 
     } catch (error) {
       console.error("שגיאה בטעינת מטלות:", error);
       setError("שגיאה בטעינת מטלות התלמידים");
     }
+  };
+
+  const setupChatListeners = (assignmentsData) => {
+    // נקה מאזינים קיימים
+    chatListeners.forEach(unsubscribe => unsubscribe());
+    const newListeners = [];
+
+    assignmentsData.forEach(assignment => {
+      const chatRef = doc(db, 'chats', assignment.id);
+      const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const chatData = docSnapshot.data();
+          setAssignments(prevAssignments => 
+            prevAssignments.map(prevAssignment => 
+              prevAssignment.id === assignment.id
+                ? { ...prevAssignment, unreadMessages: chatData.unreadCount?.teacher || 0 }
+                : prevAssignment
+            )
+          );
+        }
+      }, (error) => {
+        console.error("Error in chat listener:", error);
+      });
+      newListeners.push(unsubscribe);
+    });
+    setChatListeners(newListeners);
   };
 
   const updateAssignmentStatus = async (assignmentId, newStatus) => {
@@ -304,6 +339,30 @@ const AssignmentsPage = () => {
       }
       return aValue < bValue ? 1 : -1;
     });
+  };
+
+  // When chat modal is closed, reset unread count for that assignment
+  const handleCloseChatModal = async () => {
+    if (selectedAssignment) {
+      try {
+        const chatRef = doc(db, 'chats', selectedAssignment.id);
+        await updateDoc(chatRef, {
+          'unreadCount.teacher': 0
+        });
+        
+        setAssignments(prevAssignments =>
+          prevAssignments.map(assignment =>
+            assignment.id === selectedAssignment.id
+              ? { ...assignment, unreadMessages: 0 }
+              : assignment
+          )
+        );
+      } catch (error) {
+        console.error("Error resetting unread count:", error);
+      }
+    }
+    setShowChatModal(false);
+    setSelectedAssignment(null);
   };
 
   if (loading) {
@@ -557,10 +616,7 @@ const AssignmentsPage = () => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold">צ'אט עם {selectedAssignment.student?.fullName}</h3>
               <button
-                onClick={() => {
-                  setShowChatModal(false);
-                  setSelectedAssignment(null);
-                }}
+                onClick={handleCloseChatModal}
                 className="text-gray-500 hover:text-gray-700"
               >
                 ✕
@@ -573,6 +629,21 @@ const AssignmentsPage = () => {
             />
           </div>
         </div>
+      )}
+
+      {/* כפתור צ'אט צף */}
+      {assignments.length > 0 && (
+        <button
+          onClick={() => setShowChatModal(true)}
+          className="fixed bottom-8 left-8 z-40 px-6 py-3 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 font-semibold flex items-center gap-2"
+        >
+          <span>צ'אט שיעור</span>
+          {selectedAssignment && selectedAssignment.unreadMessages > 0 && (
+            <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              {selectedAssignment.unreadMessages}
+            </span>
+          )}
+        </button>
       )}
     </div>
   );
