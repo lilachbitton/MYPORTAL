@@ -12,6 +12,7 @@ import {
   getDocs
 } from "firebase/firestore";
 import SimpleEditor from '@/components/SimpleEditor';
+import ChatComponent from '@/components/ChatComponent';
 
 const StudentLessonPage = () => {
   const params = useParams();
@@ -27,6 +28,7 @@ const StudentLessonPage = () => {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [editHistory, setEditHistory] = useState([]);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
 
   useEffect(() => {
     if (lessonId && studentId) {
@@ -109,8 +111,7 @@ const StudentLessonPage = () => {
       setError('שגיאה בשמירת התוכן');
     }
   };
-
-  const handleSubmitAssignment = async () => {
+const handleSubmitAssignment = async () => {
     try {
       if (!assignment?.id) return;
 
@@ -179,7 +180,8 @@ const StudentLessonPage = () => {
       default: return 'חדש';
     }
   };
-const getDaysUntilDue = () => {
+
+  const getDaysUntilDue = () => {
     if (!assignment?.dueDate) return null;
     const dueDate = new Date(assignment.dueDate);
     const today = new Date();
@@ -196,8 +198,7 @@ const getDaysUntilDue = () => {
     if (daysUntilDue <= 7) return { text: `נותרו ${daysUntilDue} ימים להגשה`, color: 'text-orange-600' };
     return null;
   };
-
-  if (loading) {
+if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-orange-500"></div>
@@ -354,16 +355,22 @@ const getDaysUntilDue = () => {
               />
             </div>
 
-            {canEdit && (
-              <div className="mt-8 flex justify-start">
+            <div className="mt-8 flex justify-start gap-4">
+              {canEdit && (
                 <button
                   onClick={() => setShowSubmitModal(true)}
                   className="px-8 py-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 font-semibold"
                 >
                   {isAfterFeedback ? 'הגש לבדיקה חוזרת' : 'הגש לבדיקה'}
                 </button>
-              </div>
-            )}
+              )}
+              <button
+                onClick={() => setShowChatModal(true)}
+                className="px-8 py-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 font-semibold"
+              >
+                צ'אט עם המורה
+              </button>
+            </div>
 
             {assignment.teacherFeedback && (
               <div className="mt-6 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
@@ -423,6 +430,28 @@ const getDaysUntilDue = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* מודל הצ'אט */}
+        {showChatModal && assignment && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-2xl mx-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">צ'אט עם המורה</h3>
+                <button
+                  onClick={() => setShowChatModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+              <ChatComponent
+                assignmentId={assignment.id}
+                currentUserId={studentId}
+                userRole="student"
+              />
             </div>
           </div>
         )}
