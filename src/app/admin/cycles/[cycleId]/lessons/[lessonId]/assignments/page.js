@@ -162,16 +162,22 @@ const AssignmentsPage = () => {
     }
   };
 
-  const updateAssignmentStatus = async (assignmentId, newStatus) => {
+const updateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
       setLoading(true);
       setError(null);
 
+      // המרת סטטוסים מצד המורה לצד התלמיד
+      let studentStatus = newStatus;
+      if (newStatus === 'completed' || newStatus === 'revision') {
+        studentStatus = 'feedback';
+      }
+
       await updateDoc(doc(db, "assignments", assignmentId), {
-        status: newStatus,
+        status: studentStatus,
+        teacherStatus: newStatus, // שמירת הסטטוס המקורי של המורה
         updatedAt: new Date().toISOString()
-      });
-      
+      });      
       const assignment = assignments.find(a => a.id === assignmentId);
       
       // שליחת מייל לתלמיד בהתאם לסטטוס

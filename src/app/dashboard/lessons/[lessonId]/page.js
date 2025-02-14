@@ -154,26 +154,28 @@ const StudentLessonPage = () => {
     }
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status, teacherStatus) => {
+    if (status === 'feedback') {
+      return teacherStatus === 'completed' 
+        ? 'bg-green-100 text-green-800 border border-green-300'
+        : 'bg-yellow-100 text-yellow-800 border border-yellow-300';
+    }
     switch(status) {
       case 'new': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
       case 'submitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
-      case 'feedback': return 'bg-orange-100 text-orange-800 border border-orange-300';
       case 'resubmitted': return 'bg-purple-100 text-purple-800 border border-purple-300';
-      case 'completed': return 'bg-green-100 text-green-800 border border-green-300';
-      case 'needs_revision': return 'bg-yellow-100 text-yellow-800 border border-yellow-300';
       default: return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
     }
   };
 
-  const getStatusText = (status) => {
+  const getStatusText = (status, teacherStatus) => {
+    if (status === 'feedback') {
+      return teacherStatus === 'completed' ? 'הושלם' : 'נדרש תיקון';
+    }
     switch(status) {
       case 'new': return 'חדש';
       case 'submitted': return 'ממתין לבדיקה';
-      case 'feedback': return 'לאחר משוב';
       case 'resubmitted': return 'הוגש לבדיקה חוזרת';
-      case 'completed': return 'הושלם';
-      case 'needs_revision': return 'נדרש תיקון';
       default: return 'חדש';
     }
   };
@@ -332,8 +334,8 @@ const getDaysUntilDue = () => {
                 >
                   היסטוריית שינויים
                 </button>
-                <div className={`px-6 py-3 rounded-full text-sm font-semibold ${getStatusColor(assignment.status)}`}>
-                  {getStatusText(assignment.status)}
+                <div className={`px-6 py-3 rounded-full text-sm font-semibold ${getStatusColor(assignment.status, assignment.teacherStatus)}`}>
+                  {getStatusText(assignment.status, assignment.teacherStatus)}
                 </div>
               </div>
             </div>
