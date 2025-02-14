@@ -95,7 +95,6 @@ const StudentLessonPage = () => {
 
       await updateDoc(doc(db, "assignments", assignment.id), {
         'content.studentContent': newContent,
-        status: assignment.status === 'feedback' ? 'new' : 'new',
         updatedAt: new Date().toISOString(),
         editHistory: [...(assignment.editHistory || []), newHistoryEntry]
       });
@@ -206,6 +205,7 @@ if (loading) {
 
   const isSubmitted = ['submitted', 'resubmitted'].includes(assignment?.status);
   const isAfterFeedback = assignment?.status === 'feedback';
+  const canEdit = !isSubmitted || isAfterFeedback;
 
   return (
     <div className="min-h-screen rtl bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
@@ -328,7 +328,7 @@ if (loading) {
               <SimpleEditor
                 content={assignment.content?.studentContent || assignment.content?.template || ''}
                 onChange={handleSaveContent}
-                readOnly={isSubmitted}
+                readOnly={!canEdit}
                 style={{
                   direction: 'rtl',
                   textAlign: 'right',
@@ -338,13 +338,13 @@ if (loading) {
               />
             </div>
 
-            {(!isSubmitted) && (
+            {canEdit && (
               <div className="mt-8 flex justify-start">
                 <button
                   onClick={() => setShowSubmitModal(true)}
                   className="px-8 py-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 font-semibold"
                 >
-                  {isAfterFeedback ? 'הגש לבדיקה חוזרת' : 'הגש לבדיקה'}
+                  {isAfterFeedback ? 'הגשה חוזרת' : 'הגש לבדיקה'}
                 </button>
               </div>
             )}
