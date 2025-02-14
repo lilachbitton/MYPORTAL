@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { db } from '@/firebase/config';
 import { 
   collection, 
   doc, 
@@ -9,8 +8,10 @@ import {
   updateDoc,
   query,
   where,
-  getDocs
+  getDocs,
+  onSnapshot
 } from "firebase/firestore";
+import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
 import ChatComponent from '@/components/ChatComponent';
 
@@ -61,7 +62,7 @@ const StudentLessonPage = () => {
           ...assignmentsSnapshot.docs[0].data()
         };
 
-        // קבלת מידע הצ'אט (כמות הודעות לא נקראות)
+        // קריאת מידע הצ'אט (כמות הודעות לא נקראות)
         const chatRef = doc(db, 'chats', assignmentData.id);
         const chatDoc = await getDoc(chatRef);
         if (chatDoc.exists()) {
@@ -95,6 +96,23 @@ const StudentLessonPage = () => {
       setLoading(false);
     }
   };
+
+  // האזנה בזמן אמת לשינויים בצ'אט (עדכון unreadMessages)
+  useEffect(() => {
+    if (assignment?.id) {
+      const chatRef = doc(db, 'chats', assignment.id);
+      const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const chatData = docSnapshot.data();
+          setAssignment(prev => ({
+            ...prev,
+            unreadMessages: chatData.unreadCount?.student || 0
+          }));
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [assignment?.id]);
 
   const handleSaveContent = async (newContent) => {
     try {
@@ -368,7 +386,7 @@ const StudentLessonPage = () => {
               />
             </div>
 
-            <div className="mt-8 flex justify-start">
+            <div className="mt-8 flex justify-center">
               {canEdit && (
                 <button
                   onClick={() => setShowSubmitModal(true)}
@@ -468,9 +486,9 @@ const StudentLessonPage = () => {
       {assignment && (
         <button
           onClick={() => setShowChatModal(true)}
-          className="fixed bottom-8 right-8 z-40 px-6 py-3 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 font-semibold flex items-center gap-2"
+          className="fixed bottom-8 left-8 z-40 px-6 py-3 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 font-semibold flex items-center gap-2"
         >
-          <span>צ'אט עם המורה</span>
+          <span>צ'אט שיעור</span>
           {assignment.unreadMessages > 0 && (
             <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
               {assignment.unreadMessages}
