@@ -580,26 +580,16 @@ if (!cycle) {
                 </div>
               )}
 
-              {/* הצגת המשימה */}
-              {lesson.assignment?.title && (
+             {lesson.assignment?.title && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-bold mb-2">משימה: {lesson.assignment.title}</h3>
-                  {lesson.assignment.description && (
-                    <p className="text-gray-700 mb-2">{lesson.assignment.description}</p>
-                  )}
-                  {lesson.assignment.dueDate && (
-                    <p className="text-gray-600 mb-2">
-                      תאריך הגשה: {new Date(lesson.assignment.dueDate).toLocaleDateString('he-IL')}
-                    </p>
-                  )}
-                  {lesson.assignment.content?.template && (
-                    <div className="mt-2">
-                      <SimpleEditor
-                        content={lesson.assignment.content.template}
-                        readOnly={true}
-                      />
-                    </div>
-                  )}
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold">משימה: {lesson.assignment.title}</h3>
+                    {lesson.assignment.dueDate && (
+                      <span className="text-sm text-gray-600">
+                        תאריך הגשה: {new Date(lesson.assignment.dueDate).toLocaleDateString('he-IL')}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
