@@ -509,7 +509,6 @@ const AssignmentsPage = () => {
 
             <div className="space-y-4">
               <AssignmentFeedback
-                originalContent={selectedAssignment.content.template}
                 studentContent={selectedAssignment.content.studentContent}
                 feedbacks={selectedAssignment.feedbacks || []}
                 onSaveFeedback={async (updatedFeedbacks) => {
