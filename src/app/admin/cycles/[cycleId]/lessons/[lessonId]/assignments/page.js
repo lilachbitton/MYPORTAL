@@ -38,8 +38,7 @@ const AssignmentsPage = () => {
     if (lessonId && cycleId) {
       fetchLessonDetails();
     }
-
-    // ניקוי מאזינים (listeners) בעת unmount או שינוי תלות
+    // ניקוי מאזינים בעת unmount או שינוי תלות
     return () => {
       chatListeners.forEach(unsubscribe => unsubscribe());
     };
@@ -86,7 +85,7 @@ const AssignmentsPage = () => {
         assignmentsSnapshot.docs.map(doc => [doc.data().studentId, { id: doc.id, ...doc.data() }])
       );
 
-      // יצירת או עדכון מטלות לכל התלמידים
+      // יצירת או עדכון מטלות לכל תלמיד
       const assignmentsData = [];
       const assignmentCreationPromises = [];
 
@@ -95,13 +94,11 @@ const AssignmentsPage = () => {
         const existingAssignment = existingAssignments.get(student.id);
 
         if (existingAssignment) {
-          // אם כבר קיימת מטלה לתלמיד
           assignmentsData.push({
             ...existingAssignment,
             student
           });
         } else if (lessonData.assignment?.content?.template) {
-          // יצירת מטלה חדשה לתלמיד
           const createAssignmentPromise = async () => {
             try {
               const assignmentData = {
@@ -115,7 +112,6 @@ const AssignmentsPage = () => {
                   template: lessonData.assignment.content.template,
                   studentContent: ""
                 },
-                // בסטטוס התלמיד תישמר "feedback" כאשר המורה יעדכן ל-"completed" או "revision"
                 status: "pending",
                 teacherStatus: "pending",
                 createdAt: new Date().toISOString(),
@@ -178,7 +174,7 @@ const AssignmentsPage = () => {
 
       setAssignments(assignmentsData);
       
-      // הקמת מאזיני צ'אט בזמן אמת
+      // הקמת מאזינים בזמן אמת לשינויים בהודעות
       setupChatListeners(assignmentsData);
 
     } catch (error) {
@@ -193,20 +189,29 @@ const AssignmentsPage = () => {
     const newListeners = [];
 
     assignmentsData.forEach(assignment => {
-      const chatRef = doc(db, 'chats', assignment.id);
-      const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
-        if (docSnapshot.exists()) {
-          const chatData = docSnapshot.data();
-          setAssignments(prevAssignments => 
-            prevAssignments.map(prevAssignment => 
-              prevAssignment.id === assignment.id
-                ? { ...prevAssignment, unreadMessages: chatData.unreadCount?.teacher || 0 }
-                : prevAssignment
-            )
-          );
-        }
+      // מאזין לקולקציית ההודעות של הצ'אט
+      const messagesRef = collection(db, 'chats', assignment.id, 'messages');
+      const unsubscribe = onSnapshot(messagesRef, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const message = change.doc.data();
+            // במידה וההודעה נשלחה מהתלמיד ואנחנו לא נמצאים כרגע בצ'אט עם המטלה הזו
+            if (message.role === 'student' && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
+              setAssignments(prevAssignments => 
+                prevAssignments.map(prevAssignment => 
+                  prevAssignment.id === assignment.id
+                    ? { 
+                        ...prevAssignment, 
+                        unreadMessages: (prevAssignment.unreadMessages || 0) + 1 
+                      }
+                    : prevAssignment
+                )
+              );
+            }
+          }
+        });
       }, (error) => {
-        console.error("שגיאה במאזין הצ'אט:", error);
+        console.error("Error in chat listener:", error);
       });
 
       newListeners.push(unsubscribe);
@@ -220,8 +225,6 @@ const AssignmentsPage = () => {
       setLoading(true);
       setError(null);
 
-      // המרת סטטוסים מצד המורה לצד התלמיד:
-      // כאשר המורה בוחר "completed" או "revision" – הצד של התלמיד יקבל "feedback"
       let studentStatus = newStatus;
       if (newStatus === "completed" || newStatus === "revision") {
         studentStatus = "feedback";
@@ -235,7 +238,6 @@ const AssignmentsPage = () => {
 
       const assignment = assignments.find(a => a.id === assignmentId);
       
-      // שליחת מייל לתלמיד בהתאם לסטטוס
       if (assignment?.student?.email) {
         let emailSubject = "";
         let emailText = "";
@@ -298,20 +300,6 @@ const AssignmentsPage = () => {
     return `px-2 py-1 rounded-full text-sm font-medium ${classes[status] || classes.pending}`;
   };
 
-  const getStatusText = (status, teacherStatus) => {
-    if (status === 'feedback') {
-      return teacherStatus === 'completed' ? 'הושלם' : 'נדרש תיקון';
-    }
-    const texts = {
-      "pending": "טרם הוגש",
-      "submitted": "ממתין לבדיקה",
-      "review": "בבדיקה",
-      "completed": "הושלם",
-      "revision": "נדרש תיקון"
-    };
-    return texts[status] || "טרם הוגש";
-  };
-
   const sortBy = (key) => {
     let direction = "ascending";
     if (sortConfig.key === key && sortConfig.direction === "ascending") {
@@ -344,6 +332,7 @@ const AssignmentsPage = () => {
     });
   };
 
+  // בעת סגירת חלון הצ'אט – איפוס ספירת הודעות ושיחזור המאזינים
   const handleCloseChatModal = async () => {
     if (selectedAssignment) {
       try {
@@ -352,7 +341,6 @@ const AssignmentsPage = () => {
           'unreadCount.teacher': 0
         });
         
-        // עדכון state מקומי
         setAssignments(prevAssignments =>
           prevAssignments.map(assignment =>
             assignment.id === selectedAssignment.id
@@ -360,8 +348,11 @@ const AssignmentsPage = () => {
               : assignment
           )
         );
+
+        // חידוש מאזיני הצ'אט עבור כל המטלות
+        setupChatListeners(assignments);
       } catch (error) {
-        console.error("שגיאה באיפוס ספירת ההודעות שלא נקראו:", error);
+        console.error("Error resetting unread count:", error);
       }
     }
     setShowChatModal(false);
