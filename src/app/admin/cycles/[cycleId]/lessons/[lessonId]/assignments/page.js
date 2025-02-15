@@ -10,7 +10,8 @@ import {
   updateDoc, 
   query, 
   where,
-  onSnapshot 
+  onSnapshot,
+  increment 
 } from "firebase/firestore";
 import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
@@ -20,7 +21,7 @@ const AssignmentsPage = () => {
   const params = useParams();
   const { cycleId, lessonId } = params;
   
-  // הגדרות state
+  // State definitions
   const [lesson, setLesson] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -38,13 +39,14 @@ const AssignmentsPage = () => {
     if (lessonId && cycleId) {
       fetchLessonDetails();
     }
-    // ניקוי מאזינים בעת unmount או שינוי תלות
     return () => {
-      chatListeners.forEach(unsubscribe => unsubscribe());
+      if (chatListeners.length > 0) {
+        chatListeners.forEach(unsubscribe => unsubscribe());
+        setChatListeners([]);
+      }
     };
   }, [lessonId, cycleId]);
-
-  const fetchLessonDetails = async () => {
+const fetchLessonDetails = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -88,8 +90,7 @@ const AssignmentsPage = () => {
       // יצירת או עדכון מטלות לכל תלמיד
       const assignmentsData = [];
       const assignmentCreationPromises = [];
-
-      for (const studentDoc of studentsSnapshot.docs) {
+for (const studentDoc of studentsSnapshot.docs) {
         const student = { id: studentDoc.id, ...studentDoc.data() };
         const existingAssignment = existingAssignments.get(student.id);
 
@@ -160,18 +161,6 @@ const AssignmentsPage = () => {
         }
       }
 
-      // הגדרת נתוני צ'אט ראשוניים
-      for (const assignment of assignmentsData) {
-        const chatRef = doc(db, 'chats', assignment.id);
-        const chatDoc = await getDoc(chatRef);
-        if (chatDoc.exists()) {
-          const chatData = chatDoc.data();
-          assignment.unreadMessages = chatData.unreadCount?.teacher || 0;
-        } else {
-          assignment.unreadMessages = 0;
-        }
-      }
-
       setAssignments(assignmentsData);
       
       // הקמת מאזינים בזמן אמת לשינויים בהודעות
@@ -182,57 +171,51 @@ const AssignmentsPage = () => {
       setError("שגיאה בטעינת מטלות התלמידים");
     }
   };
-
-  // עדכון הגישה למאזינים לפי השינויים שביקשת
-  const setupChatListeners = (assignmentsData) => {
-    // ניקוי מאזינים קיימים
+const setupChatListeners = (assignmentsData) => {
     chatListeners.forEach(unsubscribe => unsubscribe());
     const newListeners = [];
 
     assignmentsData.forEach(assignment => {
-      // האזנה להודעות חדשות
-      const messagesRef = collection(db, 'chats', assignment.id, 'messages');
-      const messagesUnsubscribe = onSnapshot(messagesRef, (snapshot) => {
-        let unreadCount = 0;
-        
-        // בדיקת כל ההודעות החדשות
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const message = change.doc.data();
-            const isNewMessage = new Date(message.timestamp?.toDate() || message.timestamp) > 
-              new Date(Date.now() - 1000); // הודעה מהשנייה האחרונה
-            
-            if (isNewMessage && message.role === 'student' && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
-              unreadCount++;
-            }
-          }
-        });
-
-        if (unreadCount > 0) {
-          // עדכון מספר ההודעות שלא נקראו
+      // האזנה לשינויים במסמך הראשי של הצ'אט
+      const chatRef = doc(db, 'chats', assignment.id);
+      const chatUnsubscribe = onSnapshot(chatRef, (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const chatData = docSnapshot.data();
           setAssignments(prevAssignments => 
             prevAssignments.map(prevAssignment => 
               prevAssignment.id === assignment.id
                 ? { 
                     ...prevAssignment, 
-                    unreadMessages: (prevAssignment.unreadMessages || 0) + unreadCount 
+                    unreadMessages: chatData.unreadCount?.teacher || 0 
                   }
                 : prevAssignment
             )
           );
-
-          // עדכון המסמך הראשי של הצ'אט
-          const chatRef = doc(db, 'chats', assignment.id);
-          getDoc(chatRef).then(chatDoc => {
-            const currentUnreadCount = chatDoc.data()?.unreadCount?.teacher || 0;
-            updateDoc(chatRef, {
-              'unreadCount.teacher': currentUnreadCount + unreadCount
-            });
-          });
         }
       });
 
-      newListeners.push(messagesUnsubscribe);
+      // האזנה להודעות חדשות
+      const messagesRef = collection(db, 'chats', assignment.id, 'messages');
+      const messagesQuery = query(messagesRef, where('role', '==', 'student'));
+      const messagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const message = change.doc.data();
+            const isNewMessage = new Date(message.timestamp?.toDate() || message.timestamp) > 
+              new Date(Date.now() - 1000);
+            
+            if (isNewMessage && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
+              // עדכון המונה בחלון הראשי של הצ'אט
+              const chatRef = doc(db, 'chats', assignment.id);
+              updateDoc(chatRef, {
+                'unreadCount.teacher': increment(1)
+              });
+            }
+          }
+        });
+      });
+
+      newListeners.push(chatUnsubscribe, messagesUnsubscribe);
     });
 
     setChatListeners(newListeners);
@@ -301,8 +284,7 @@ const AssignmentsPage = () => {
       setLoading(false);
     }
   };
-
-  const getStatusBadgeClass = (status, teacherStatus) => {
+const getStatusBadgeClass = (status, teacherStatus) => {
     if (status === 'feedback') {
       return teacherStatus === 'completed'
         ? 'px-2 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800'
@@ -350,7 +332,6 @@ const AssignmentsPage = () => {
     });
   };
 
-  // עדכון handleCloseChatModal לפי השינויים שביקשת
   const handleCloseChatModal = async () => {
     if (selectedAssignment) {
       try {
@@ -373,8 +354,7 @@ const AssignmentsPage = () => {
     setShowChatModal(false);
     setSelectedAssignment(null);
   };
-
-  if (loading) {
+if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
@@ -615,7 +595,7 @@ const AssignmentsPage = () => {
         </div>
       )}
 
-      {/* מודל הצ'אט */}
+     {/* מודל הצ'אט */}
       {showChatModal && selectedAssignment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-2xl mx-4">

@@ -9,7 +9,8 @@ import {
   query,
   where,
   getDocs,
-  onSnapshot
+  onSnapshot,
+  increment
 } from "firebase/firestore";
 import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
@@ -30,14 +31,14 @@ const StudentLessonPage = () => {
   const [editHistory, setEditHistory] = useState([]);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [chatListener, setChatListener] = useState(null);
 
   useEffect(() => {
     if (lessonId && studentId) {
       fetchLessonAndAssignment();
     }
   }, [lessonId, studentId]);
-
-  const fetchLessonAndAssignment = async () => {
+const fetchLessonAndAssignment = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -96,10 +97,10 @@ const StudentLessonPage = () => {
       setLoading(false);
     }
   };
-
-  // האזנה בזמן אמת לשינויים בצ'אט (עדכון unreadMessages)
+// האזנה בזמן אמת לשינויים בצ'אט
   useEffect(() => {
     if (assignment?.id) {
+      // האזנה למסמך הראשי של הצ'אט
       const chatRef = doc(db, 'chats', assignment.id);
       const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
         if (docSnapshot.exists()) {
@@ -110,9 +111,39 @@ const StudentLessonPage = () => {
           }));
         }
       });
-      return () => unsubscribe();
+
+      // האזנה להודעות חדשות
+      const messagesRef = collection(db, 'chats', assignment.id, 'messages');
+      const messagesQuery = query(messagesRef, where('role', '==', 'teacher'));
+      const messagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const message = change.doc.data();
+            const isNewMessage = new Date(message.timestamp?.toDate() || message.timestamp) > 
+              new Date(Date.now() - 1000);
+            
+            if (isNewMessage && !showChatModal) {
+              // עדכון המונה בחלון הראשי של הצ'אט
+              const chatRef = doc(db, 'chats', assignment.id);
+              updateDoc(chatRef, {
+                'unreadCount.student': increment(1)
+              });
+            }
+          }
+        });
+      });
+
+      setChatListener(() => () => {
+        unsubscribe();
+        messagesUnsubscribe();
+      });
+
+      return () => {
+        unsubscribe();
+        messagesUnsubscribe();
+      };
     }
-  }, [assignment?.id]);
+  }, [assignment?.id, showChatModal]);
 
   const handleSaveContent = async (newContent) => {
     try {
@@ -185,7 +216,25 @@ const StudentLessonPage = () => {
     }
   };
 
-  const getStatusColor = (status, teacherStatus) => {
+  const handleCloseChatModal = async () => {
+    if (assignment?.id) {
+      try {
+        const chatRef = doc(db, 'chats', assignment.id);
+        await updateDoc(chatRef, {
+          'unreadCount.student': 0
+        });
+        
+        setAssignment(prev => ({
+          ...prev,
+          unreadMessages: 0
+        }));
+      } catch (error) {
+        console.error("Error resetting unread count:", error);
+      }
+    }
+    setShowChatModal(false);
+  };
+const getStatusColor = (status, teacherStatus) => {
     if (status === 'feedback') {
       return teacherStatus === 'completed' 
         ? 'bg-green-100 text-green-800 border border-green-300'
@@ -254,8 +303,7 @@ const StudentLessonPage = () => {
   const isSubmitted = ['submitted', 'resubmitted', 'completed'].includes(assignment?.status);
   const isAfterFeedback = ['feedback', 'needs_revision'].includes(assignment?.status);
   const canEdit = !isSubmitted && assignment?.status !== 'completed';
-
-  return (
+return (
     <div className="min-h-screen rtl bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
       {showSuccessAlert && (
         <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg z-50 shadow-lg">
@@ -339,74 +387,91 @@ const StudentLessonPage = () => {
             </div>
           </div>
         )}
+return (
+    <div className="min-h-screen rtl bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
+      {showSuccessAlert && (
+        <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg z-50 shadow-lg">
+          {successMessage}
+        </div>
+      )}
 
-        {/* המשימה */}
-        {assignment && (
+      <div className="max-w-5xl mx-auto space-y-8">
+        {/* כותרת השיעור */}
+        <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4 border-b pb-4 border-orange-500 text-center">
+            {lesson.title}
+          </h1>
+          <p className="text-gray-600 text-center">
+            {new Date(lesson.date).toLocaleDateString('he-IL')}
+          </p>
+        </div>
+
+        {/* הקלטת השיעור */}
+        {lesson.zoomLink && (
           <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
-            <div className="flex flex-row-reverse justify-between items-center border-b pb-6 mb-6 border-orange-500">
-              <div className="text-right">
-                <h2 className="text-2xl font-bold mb-2">המשימה שלך</h2>
-                {assignment.dueDate && (
-                  <div className="space-y-1">
-                    <p className="text-gray-600">
-                      יש להגיש עד: {new Date(assignment.dueDate).toLocaleDateString('he-IL')}
-                    </p>
-                    {getDueDateWarning() && (
-                      <p className={getDueDateWarning().color}>
-                        {getDueDateWarning().text}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setHistoryModalOpen(true)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  היסטוריית שינויים
-                </button>
-                <div className={`px-6 py-3 rounded-full text-sm font-semibold ${getStatusColor(assignment.status, assignment.teacherStatus)}`}>
-                  {getStatusText(assignment.status, assignment.teacherStatus)}
-                </div>
-              </div>
-            </div>
-
-            <div dir="rtl" style={{ direction: 'rtl' }}>
-              <SimpleEditor
-                content={assignment.content?.studentContent || assignment.content?.template || ''}
-                onChange={handleSaveContent}
-                readOnly={!canEdit}
-                style={{
-                  direction: 'rtl',
-                  textAlign: 'right',
-                  minHeight: '300px',
-                }}
-                className="bg-gray-50 rounded-xl p-6 shadow-inner"
+            <h2 className="text-2xl font-semibold mb-6 text-right border-b pb-4 border-orange-500">
+              הקלטת השיעור
+            </h2>
+            <div className="aspect-w-16 aspect-h-9 rounded-xl overflow-hidden">
+              <iframe
+                src={lesson.zoomLink?.includes('vimeo') 
+                  ? `${lesson.zoomLink}?autoplay=0&title=0&byline=0&portrait=0` 
+                  : lesson.zoomLink?.includes('youtu') 
+                    ? `https://www.youtube.com/embed/${lesson.zoomLink.split('v=')[1]}`
+                    : lesson.zoomLink}
+                className="w-full h-96 rounded-xl"
+                allow="autoplay; fullscreen; picture-in-picture"
+                allowFullScreen
+                frameBorder="0"
+                title="שיעור מוקלט"
               />
             </div>
-
-            <div className="mt-8 flex justify-center">
-              {canEdit && (
-                <button
-                  onClick={() => setShowSubmitModal(true)}
-                  className="px-8 py-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 font-semibold"
-                >
-                  {isAfterFeedback ? 'הגש לבדיקה חוזרת' : 'הגש לבדיקה'}
-                </button>
-              )}
-            </div>
-
-            {assignment.teacherFeedback && (
-              <div className="mt-6 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
-                <h3 className="font-semibold text-lg mb-2">משוב מהמורה:</h3>
-                <p className="text-gray-700">{assignment.teacherFeedback}</p>
-              </div>
-            )}
           </div>
         )}
 
-        {/* מודל אישור הגשה */}
+        {/* מצגת השיעור */}
+        {lesson.presentationLink && (
+          <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
+            <h2 className="text-2xl font-semibold mb-6 text-right border-b pb-4 border-orange-500">
+              מצגת השיעור
+            </h2>
+            <div className="flex justify-center">
+              <a
+                href={lesson.presentationLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1"
+              >
+                צפה במצגת
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* חומרי עזר */}
+        {lesson.materials?.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
+            <h2 className="text-2xl font-semibold mb-6 text-right border-b pb-4 border-orange-500">
+              חומרי עזר
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {lesson.materials.map((material, index) => (
+                <a
+                  key={index}
+                  href={material.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group block p-6 bg-gray-50 rounded-xl hover:bg-orange-50 transition-all duration-300 text-right shadow hover:shadow-md transform hover:-translate-y-1"
+                >
+                  <span className="text-lg font-medium text-gray-900 group-hover:text-orange-600">
+                    {material.title}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+{/* מודל אישור הגשה */}
         {showSubmitModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full mx-4">
@@ -466,7 +531,7 @@ const StudentLessonPage = () => {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-bold">צ'אט עם המורה</h3>
                 <button
-                  onClick={() => setShowChatModal(false)}
+                  onClick={handleCloseChatModal}
                   className="text-gray-500 hover:text-gray-700"
                 >
                   ✕
