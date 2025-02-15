@@ -63,7 +63,7 @@ const StudentLessonPage = () => {
           ...assignmentsSnapshot.docs[0].data()
         };
 
-        // קריאת ספירת הודעות לא נקראות מתוך מסמך הצ'אט
+        // קריאת מידע הצ'אט (כמות הודעות שלא נקראו)
         const chatRef = doc(db, 'chats', assignmentData.id);
         const chatDoc = await getDoc(chatRef);
         if (chatDoc.exists()) {
@@ -98,7 +98,7 @@ const StudentLessonPage = () => {
     }
   };
 
-  // מאזין לעדכון השדה unreadCount במסמך הצ'אט
+  // מאזינים בזמן אמת לעדכוני הצ'אט
   useEffect(() => {
     if (assignment?.id) {
       const chatRef = doc(db, 'chats', assignment.id);
@@ -109,14 +109,41 @@ const StudentLessonPage = () => {
             ...prev,
             unreadMessages: chatData.unreadCount?.student || 0
           }));
-          console.log("Student page unreadCount updated:", chatData.unreadCount?.student);
         }
       });
+
+      const messagesRef = collection(db, 'chats', assignment.id, 'messages');
+      const messagesQuery = query(messagesRef, where('role', '==', 'teacher'));
+      const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const message = change.doc.data();
+            const messageTimestamp = new Date(
+              message.timestamp?.toDate ? message.timestamp.toDate() : message.timestamp
+            );
+            const isNewMessage = messageTimestamp > new Date(Date.now() - 3000);
+            console.log("Student page - New teacher message:", message, "isNewMessage:", isNewMessage);
+            if (isNewMessage && !showChatModal) {
+              // עדכון המונה במצב ה-UI
+              setAssignment(prev => ({
+                ...prev,
+                unreadMessages: (prev.unreadMessages || 0) + 1
+              }));
+              // עדכון במסד הנתונים
+              updateDoc(chatRef, {
+                'unreadCount.student': increment(1)
+              }).catch(err => console.error("Error updating unread count:", err));
+            }
+          }
+        });
+      });
+
       return () => {
         unsubscribeChat();
+        unsubscribeMessages();
       };
     }
-  }, [assignment?.id]);
+  }, [assignment?.id, showChatModal]);
 
   const handleSaveContent = async (newContent) => {
     try {
@@ -207,6 +234,51 @@ const StudentLessonPage = () => {
     setShowChatModal(false);
   };
 
+  // פונקציות עזר להצגת סטטוס, תאריכים ועוד (ניתן לשנות לפי הצורך)
+  const getStatusColor = (status, teacherStatus) => {
+    if (status === 'feedback') {
+      return teacherStatus === 'completed' 
+        ? 'bg-green-100 text-green-800 border border-green-300'
+        : 'bg-yellow-100 text-yellow-800 border border-yellow-300';
+    }
+    switch(status) {
+      case 'new': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+      case 'submitted': return 'bg-blue-100 text-blue-800 border border-blue-300';
+      case 'resubmitted': return 'bg-purple-100 text-purple-800 border border-purple-300';
+      default: return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+    }
+  };
+
+  const getStatusText = (status, teacherStatus) => {
+    if (status === 'feedback') {
+      return teacherStatus === 'completed' ? 'הושלם' : 'נדרש תיקון';
+    }
+    switch(status) {
+      case 'new': return 'חדש';
+      case 'submitted': return 'ממתין לבדיקה';
+      case 'resubmitted': return 'הוגש לבדיקה חוזרת';
+      default: return 'חדש';
+    }
+  };
+
+  const getDaysUntilDue = () => {
+    if (!assignment?.dueDate) return null;
+    const dueDate = new Date(assignment.dueDate);
+    const today = new Date();
+    const diffTime = dueDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getDueDateWarning = () => {
+    const daysUntilDue = getDaysUntilDue();
+    if (daysUntilDue === null) return null;
+    if (daysUntilDue < 0) return { text: 'חלף מועד ההגשה!', color: 'text-red-600 font-bold' };
+    if (daysUntilDue <= 2) return { text: `נותרו ${daysUntilDue} ימים להגשה!`, color: 'text-red-600' };
+    if (daysUntilDue <= 7) return { text: `נותרו ${daysUntilDue} ימים להגשה`, color: 'text-orange-600' };
+    return null;
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -242,7 +314,7 @@ const StudentLessonPage = () => {
       )}
 
       <div className="max-w-5xl mx-auto space-y-8">
-        {/* פרטי השיעור */}
+        {/* כותרת השיעור */}
         <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-4 border-b pb-4 border-orange-500 text-center">
             {lesson.title}

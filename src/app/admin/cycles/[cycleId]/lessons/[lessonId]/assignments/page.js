@@ -21,6 +21,7 @@ const AssignmentsPage = () => {
   const params = useParams();
   const { cycleId, lessonId } = params;
   
+  // הגדרות state
   const [lesson, setLesson] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -39,6 +40,7 @@ const AssignmentsPage = () => {
       fetchLessonDetails();
     }
     return () => {
+      // נקה מאזינים
       chatListeners.forEach(unsubscribe => unsubscribe());
       setChatListeners([]);
     };
@@ -67,6 +69,7 @@ const AssignmentsPage = () => {
 
   const fetchAssignments = async (lessonData) => {
     try {
+      // קבלת כל התלמידים הפעילים במחזור
       const studentsQuery = query(
         collection(db, "users"),
         where("cycle", "==", cycleId),
@@ -74,6 +77,7 @@ const AssignmentsPage = () => {
       );
       const studentsSnapshot = await getDocs(studentsQuery);
 
+      // קבלת המטלות הקיימות
       const assignmentsQuery = query(
         collection(db, "assignments"),
         where("lessonId", "==", lessonId)
@@ -83,6 +87,7 @@ const AssignmentsPage = () => {
         assignmentsSnapshot.docs.map(doc => [doc.data().studentId, { id: doc.id, ...doc.data() }])
       );
 
+      // יצירה או עדכון מטלות לכל תלמיד
       const assignmentsData = [];
       const assignmentCreationPromises = [];
       for (const studentDoc of studentsSnapshot.docs) {
@@ -116,6 +121,7 @@ const AssignmentsPage = () => {
 
               const newAssignmentRef = await addDoc(collection(db, "assignments"), assignmentData);
 
+              // שליחת מייל לתלמיד
               await fetch("/api/sendEmail", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -157,7 +163,7 @@ const AssignmentsPage = () => {
 
       setAssignments(assignmentsData);
       
-      // מאזין לעדכוני unreadCount במסמכי הצ'אט
+      // הקמת מאזינים בזמן אמת להודעות בצ'אט
       setupChatListeners(assignmentsData);
 
     } catch (error) {
@@ -167,6 +173,7 @@ const AssignmentsPage = () => {
   };
 
   const setupChatListeners = (assignmentsData) => {
+    // נקה מאזינים קיימים
     chatListeners.forEach(unsubscribe => unsubscribe());
     const newListeners = [];
 
@@ -185,10 +192,30 @@ const AssignmentsPage = () => {
                 : prevAssignment
             )
           );
-          console.log("Teacher page unreadCount updated for assignment", assignment.id, chatData.unreadCount?.teacher);
         }
       });
-      newListeners.push(unsubscribeChat);
+
+      const messagesRef = collection(db, 'chats', assignment.id, 'messages');
+      const messagesQuery = query(messagesRef, where('role', '==', 'student'));
+      const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const message = change.doc.data();
+            const messageTimestamp = new Date(
+              message.timestamp?.toDate ? message.timestamp.toDate() : message.timestamp
+            );
+            const isNewMessage = messageTimestamp > new Date(Date.now() - 3000);
+            console.log("Teacher page - New student message:", message, "isNewMessage:", isNewMessage);
+            if (isNewMessage && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
+              updateDoc(chatRef, {
+                'unreadCount.teacher': increment(1)
+              }).catch(err => console.error("Error updating teacher unread count:", err));
+            }
+          }
+        });
+      });
+
+      newListeners.push(unsubscribeChat, unsubscribeMessages);
     });
 
     setChatListeners(newListeners);
@@ -501,6 +528,71 @@ const AssignmentsPage = () => {
       {assignments.length === 0 && (
         <div className="text-center py-8 text-gray-500">
           לא נמצאו תלמידים במחזור זה
+        </div>
+      )}
+
+      {/* מודל להצגת תשובת התלמיד */}
+      {showResponseModal && selectedAssignment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">
+                תשובת התלמיד: {selectedAssignment.student?.fullName}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowResponseModal(false);
+                  setSelectedAssignment(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-bold mb-2">המשימה המקורית:</h3>
+                <div className="bg-gray-50 p-4 rounded border max-h-60 overflow-y-auto">
+                  <SimpleEditor
+                    content={selectedAssignment.content.template}
+                    readOnly={true}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-bold mb-2">תשובת התלמיד:</h3>
+                <div className="bg-white p-4 rounded border">
+                  <SimpleEditor
+                    content={selectedAssignment.content.studentContent}
+                    readOnly={true}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center mt-4">
+                <div>
+                  <span className="text-sm text-gray-500">
+                    עודכן: {new Date(selectedAssignment.updatedAt).toLocaleDateString('he-IL')}
+                  </span>
+                </div>
+                <div className="space-x-2">
+                  <select
+                    value={selectedAssignment.teacherStatus || selectedAssignment.status}
+                    onChange={(e) => updateAssignmentStatus(selectedAssignment.id, e.target.value)}
+                    className={`${getStatusBadgeClass(selectedAssignment.status, selectedAssignment.teacherStatus)} border-0 cursor-pointer`}
+                  >
+                    <option value="pending">טרם הוגש</option>
+                    <option value="submitted">ממתין לבדיקה</option>
+                    <option value="review">בבדיקה</option>
+                    <option value="completed">הושלם</option>
+                    <option value="revision">נדרש תיקון</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
