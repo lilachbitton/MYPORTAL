@@ -18,9 +18,17 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
 
+  // פונקציית הגלילה לסוף עם setTimeout קטן כדי לוודא שהתוכן נטען
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
   };
+
+  // גלילה אוטומטית בכל פעם שההודעות משתנות
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     const initializeChat = async () => {
@@ -48,12 +56,11 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
           [`unreadCount.${userRole}`]: 0
         });
 
-        // מתחילים להאזין לשינויים
+        // מאזינים לשינויים בצ'אט
         const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
           if (docSnapshot.exists()) {
             const data = docSnapshot.data();
             setMessages(data.messages || []);
-            scrollToBottom();
           }
         });
 
