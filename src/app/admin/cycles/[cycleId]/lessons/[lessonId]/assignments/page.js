@@ -190,37 +190,46 @@ const AssignmentsPage = () => {
     const newListeners = [];
 
     assignmentsData.forEach(assignment => {
-      // מאזין לקולקציית ההודעות של הצ'אט
+      // האזנה להודעות חדשות
       const messagesRef = collection(db, 'chats', assignment.id, 'messages');
       const messagesUnsubscribe = onSnapshot(messagesRef, (snapshot) => {
-        // מאזין לשינויים בזמן אמת
+        let unreadCount = 0;
+        
+        // בדיקת כל ההודעות החדשות
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const message = change.doc.data();
-            // אם זו הודעה חדשה מהתלמיד והצ'אט לא פתוח
-            if (message.role === 'student' && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
-              setAssignments(prevAssignments => 
-                prevAssignments.map(prevAssignment => 
-                  prevAssignment.id === assignment.id
-                    ? { 
-                        ...prevAssignment, 
-                        unreadMessages: (prevAssignment.unreadMessages || 0) + 1 
-                      }
-                    : prevAssignment
-                )
-              );
-
-              // עדכון המסמך הראשי של הצ'אט
-              const chatRef = doc(db, 'chats', assignment.id);
-              getDoc(chatRef).then(chatDoc => {
-                const currentUnreadCount = chatDoc.data()?.unreadCount?.teacher || 0;
-                updateDoc(chatRef, {
-                  'unreadCount.teacher': currentUnreadCount + 1
-                });
-              });
+            const isNewMessage = new Date(message.timestamp?.toDate() || message.timestamp) > 
+              new Date(Date.now() - 1000); // הודעה מהשנייה האחרונה
+            
+            if (isNewMessage && message.role === 'student' && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
+              unreadCount++;
             }
           }
         });
+
+        if (unreadCount > 0) {
+          // עדכון מספר ההודעות שלא נקראו
+          setAssignments(prevAssignments => 
+            prevAssignments.map(prevAssignment => 
+              prevAssignment.id === assignment.id
+                ? { 
+                    ...prevAssignment, 
+                    unreadMessages: (prevAssignment.unreadMessages || 0) + unreadCount 
+                  }
+                : prevAssignment
+            )
+          );
+
+          // עדכון המסמך הראשי של הצ'אט
+          const chatRef = doc(db, 'chats', assignment.id);
+          getDoc(chatRef).then(chatDoc => {
+            const currentUnreadCount = chatDoc.data()?.unreadCount?.teacher || 0;
+            updateDoc(chatRef, {
+              'unreadCount.teacher': currentUnreadCount + unreadCount
+            });
+          });
+        }
       });
 
       newListeners.push(messagesUnsubscribe);
