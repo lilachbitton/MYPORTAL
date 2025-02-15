@@ -247,15 +247,12 @@ const AssignmentsPage = () => {
     }
   };
 
+  // עדכון פונקציית getStatusBadgeClass
   const getStatusBadgeClass = (status, teacherStatus) => {
-    if (status === 'feedback') {
-      return teacherStatus === 'completed'
-        ? 'px-2 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800'
-        : 'px-2 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800';
-    }
     const classes = {
       "pending": "bg-gray-100 text-gray-800",
       "submitted": "bg-yellow-100 text-yellow-800",
+      "resubmitted": "bg-purple-100 text-purple-800", // סטטוס חדש
       "review": "bg-blue-100 text-blue-800",
       "completed": "bg-green-100 text-green-800",
       "revision": "bg-red-100 text-red-800"
@@ -263,13 +260,12 @@ const AssignmentsPage = () => {
     return `px-2 py-1 rounded-full text-sm font-medium ${classes[status] || classes.pending}`;
   };
 
-  const getStatusText = (status, teacherStatus) => {
-    if (status === 'feedback') {
-      return teacherStatus === 'completed' ? 'הושלם' : 'נדרש תיקון';
-    }
+  // עדכון פונקציית getStatusText
+  const getStatusText = (status) => {
     const texts = {
       "pending": "טרם הוגש",
       "submitted": "ממתין לבדיקה",
+      "resubmitted": "הוגש לבדיקה חוזרת", // טקסט חדש
       "review": "בבדיקה",
       "completed": "הושלם",
       "revision": "נדרש תיקון"
@@ -437,6 +433,7 @@ const AssignmentsPage = () => {
                   >
                     <option value="pending">טרם הוגש</option>
                     <option value="submitted">ממתין לבדיקה</option>
+                    <option value="resubmitted">הוגש לבדיקה חוזרת</option>
                     <option value="review">בבדיקה</option>
                     <option value="completed">הושלם</option>
                     <option value="revision">נדרש תיקון</option>
