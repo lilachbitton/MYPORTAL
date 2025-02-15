@@ -15,7 +15,7 @@ import {
   arrayUnion 
 } from "firebase/firestore";
 
-const ChatComponent = ({ assignmentId, currentUserId, userRole, teacherName = "מורה" }) => {
+const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -25,11 +25,6 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole, teacherName = "�
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
-
-  // גלילה לסוף בכל פעם שהודעות מתעדכנות
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
 
   useEffect(() => {
     const initializeChat = async () => {
@@ -49,7 +44,7 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole, teacherName = "�
             assignmentId,
             messages: [],
             participants: {
-              teacherId: assignmentData.teacherId || "admin", // ברירת מחדל
+              teacherId: assignmentData.teacherId || "admin", // כרגע ברירת מחדל עד שנוסיף teacherId
               studentId: assignmentData.studentId
             },
             lastMessage: null,
@@ -61,10 +56,10 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole, teacherName = "�
           });
         }
 
-        // האזנה לשינויים בצ'אט בזמן אמת
-        const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
-          if (docSnapshot.exists()) {
-            const data = docSnapshot.data();
+        // האזנה לשינויים בצ'אט
+        const unsubscribe = onSnapshot(chatRef, (doc) => {
+          if (doc.exists()) {
+            const data = doc.data();
             setMessages(data.messages || []);
             scrollToBottom();
 
@@ -104,7 +99,6 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole, teacherName = "�
       const message = {
         content: newMessage.trim(),
         senderId: currentUserId,
-        senderName: userRole === "teacher" ? teacherName : null, // אם המורה שולח, נשמר השם
         timestamp: new Date().toISOString(),
         senderRole: userRole,
         isRead: false
@@ -117,7 +111,6 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole, teacherName = "�
           timestamp: message.timestamp,
           senderId: currentUserId
         },
-        // מגדילים את מספר ההודעות הלא נקראות אצל הצד השונ/ה
         [`unreadCount.${userRole === "teacher" ? "student" : "teacher"}`]: 
           (chatData?.unreadCount?.[userRole === "teacher" ? "student" : "teacher"] || 0) + 1
       });
@@ -146,12 +139,8 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole, teacherName = "�
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`flex flex-col ${message.senderId === currentUserId ? "items-end" : "items-start"}`}
+            className={`flex ${message.senderId === currentUserId ? "justify-end" : "justify-start"}`}
           >
-            {/* שם השולח */}
-            <span className="text-xs text-gray-500 mb-1">
-              {message.senderId === currentUserId ? "אני:" : message.senderName || "מורה:"}
-            </span>
             <div
               className={`max-w-[70%] p-3 rounded-lg ${
                 message.senderId === currentUserId

@@ -9,8 +9,7 @@ import {
   query,
   where,
   getDocs,
-  onSnapshot,
-  increment
+  onSnapshot
 } from "firebase/firestore";
 import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
@@ -63,7 +62,7 @@ const StudentLessonPage = () => {
           ...assignmentsSnapshot.docs[0].data()
         };
 
-        // קריאת מידע הצ'אט (כמות הודעות שלא נקראו)
+        // קריאת מידע הצ'אט (כמות הודעות לא נקראות)
         const chatRef = doc(db, 'chats', assignmentData.id);
         const chatDoc = await getDoc(chatRef);
         if (chatDoc.exists()) {
@@ -98,11 +97,11 @@ const StudentLessonPage = () => {
     }
   };
 
-  // מאזינים בזמן אמת לעדכוני הצ'אט
+  // האזנה בזמן אמת לשינויים בצ'אט (עדכון unreadMessages)
   useEffect(() => {
     if (assignment?.id) {
       const chatRef = doc(db, 'chats', assignment.id);
-      const unsubscribeChat = onSnapshot(chatRef, (docSnapshot) => {
+      const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
         if (docSnapshot.exists()) {
           const chatData = docSnapshot.data();
           setAssignment(prev => ({
@@ -111,39 +110,9 @@ const StudentLessonPage = () => {
           }));
         }
       });
-
-      const messagesRef = collection(db, 'chats', assignment.id, 'messages');
-      const messagesQuery = query(messagesRef, where('role', '==', 'teacher'));
-      const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const message = change.doc.data();
-            const messageTimestamp = new Date(
-              message.timestamp?.toDate ? message.timestamp.toDate() : message.timestamp
-            );
-            const isNewMessage = messageTimestamp > new Date(Date.now() - 3000);
-            console.log("Student page - New teacher message:", message, "isNewMessage:", isNewMessage);
-            if (isNewMessage && !showChatModal) {
-              // עדכון המונה במצב ה-UI
-              setAssignment(prev => ({
-                ...prev,
-                unreadMessages: (prev.unreadMessages || 0) + 1
-              }));
-              // עדכון במסד הנתונים
-              updateDoc(chatRef, {
-                'unreadCount.student': increment(1)
-              }).catch(err => console.error("Error updating unread count:", err));
-            }
-          }
-        });
-      });
-
-      return () => {
-        unsubscribeChat();
-        unsubscribeMessages();
-      };
+      return () => unsubscribe();
     }
-  }, [assignment?.id, showChatModal]);
+  }, [assignment?.id]);
 
   const handleSaveContent = async (newContent) => {
     try {
@@ -216,25 +185,6 @@ const StudentLessonPage = () => {
     }
   };
 
-  const handleCloseChatModal = async () => {
-    if (assignment?.id) {
-      try {
-        const chatRef = doc(db, 'chats', assignment.id);
-        await updateDoc(chatRef, {
-          'unreadCount.student': 0
-        });
-        setAssignment(prev => ({
-          ...prev,
-          unreadMessages: 0
-        }));
-      } catch (error) {
-        console.error("Error resetting unread count:", error);
-      }
-    }
-    setShowChatModal(false);
-  };
-
-  // פונקציות עזר להצגת סטטוס, תאריכים ועוד (ניתן לשנות לפי הצורך)
   const getStatusColor = (status, teacherStatus) => {
     if (status === 'feedback') {
       return teacherStatus === 'completed' 
@@ -390,6 +340,72 @@ const StudentLessonPage = () => {
           </div>
         )}
 
+        {/* המשימה */}
+        {assignment && (
+          <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
+            <div className="flex flex-row-reverse justify-between items-center border-b pb-6 mb-6 border-orange-500">
+              <div className="text-right">
+                <h2 className="text-2xl font-bold mb-2">המשימה שלך</h2>
+                {assignment.dueDate && (
+                  <div className="space-y-1">
+                    <p className="text-gray-600">
+                      יש להגיש עד: {new Date(assignment.dueDate).toLocaleDateString('he-IL')}
+                    </p>
+                    {getDueDateWarning() && (
+                      <p className={getDueDateWarning().color}>
+                        {getDueDateWarning().text}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setHistoryModalOpen(true)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  היסטוריית שינויים
+                </button>
+                <div className={`px-6 py-3 rounded-full text-sm font-semibold ${getStatusColor(assignment.status, assignment.teacherStatus)}`}>
+                  {getStatusText(assignment.status, assignment.teacherStatus)}
+                </div>
+              </div>
+            </div>
+
+            <div dir="rtl" style={{ direction: 'rtl' }}>
+              <SimpleEditor
+                content={assignment.content?.studentContent || assignment.content?.template || ''}
+                onChange={handleSaveContent}
+                readOnly={!canEdit}
+                style={{
+                  direction: 'rtl',
+                  textAlign: 'right',
+                  minHeight: '300px',
+                }}
+                className="bg-gray-50 rounded-xl p-6 shadow-inner"
+              />
+            </div>
+
+            <div className="mt-8 flex justify-center">
+              {canEdit && (
+                <button
+                  onClick={() => setShowSubmitModal(true)}
+                  className="px-8 py-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 font-semibold"
+                >
+                  {isAfterFeedback ? 'הגש לבדיקה חוזרת' : 'הגש לבדיקה'}
+                </button>
+              )}
+            </div>
+
+            {assignment.teacherFeedback && (
+              <div className="mt-6 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+                <h3 className="font-semibold text-lg mb-2">משוב מהמורה:</h3>
+                <p className="text-gray-700">{assignment.teacherFeedback}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* מודל אישור הגשה */}
         {showSubmitModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -450,7 +466,7 @@ const StudentLessonPage = () => {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-bold">צ'אט עם המורה</h3>
                 <button
-                  onClick={handleCloseChatModal}
+                  onClick={() => setShowChatModal(false)}
                   className="text-gray-500 hover:text-gray-700"
                 >
                   ✕

@@ -9,9 +9,7 @@ import {
   getDoc, 
   updateDoc, 
   query, 
-  where,
-  onSnapshot,
-  increment 
+  where 
 } from "firebase/firestore";
 import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
@@ -21,7 +19,6 @@ const AssignmentsPage = () => {
   const params = useParams();
   const { cycleId, lessonId } = params;
   
-  // הגדרות state
   const [lesson, setLesson] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -33,17 +30,11 @@ const AssignmentsPage = () => {
   const [showResponseModal, setShowResponseModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
-  const [chatListeners, setChatListeners] = useState([]);
 
   useEffect(() => {
     if (lessonId && cycleId) {
       fetchLessonDetails();
     }
-    return () => {
-      // נקה מאזינים
-      chatListeners.forEach(unsubscribe => unsubscribe());
-      setChatListeners([]);
-    };
   }, [lessonId, cycleId]);
 
   const fetchLessonDetails = async () => {
@@ -69,7 +60,7 @@ const AssignmentsPage = () => {
 
   const fetchAssignments = async (lessonData) => {
     try {
-      // קבלת כל התלמידים הפעילים במחזור
+      // קבלת כל התלמידים במחזור
       const studentsQuery = query(
         collection(db, "users"),
         where("cycle", "==", cycleId),
@@ -77,7 +68,7 @@ const AssignmentsPage = () => {
       );
       const studentsSnapshot = await getDocs(studentsQuery);
 
-      // קבלת המטלות הקיימות
+      // קבלת כל המטלות הקיימות
       const assignmentsQuery = query(
         collection(db, "assignments"),
         where("lessonId", "==", lessonId)
@@ -87,19 +78,22 @@ const AssignmentsPage = () => {
         assignmentsSnapshot.docs.map(doc => [doc.data().studentId, { id: doc.id, ...doc.data() }])
       );
 
-      // יצירה או עדכון מטלות לכל תלמיד
+      // יצירת או עדכון מטלות לכל התלמידים
       const assignmentsData = [];
       const assignmentCreationPromises = [];
+
       for (const studentDoc of studentsSnapshot.docs) {
         const student = { id: studentDoc.id, ...studentDoc.data() };
         const existingAssignment = existingAssignments.get(student.id);
 
         if (existingAssignment) {
+          // אם כבר קיימת מטלה לתלמיד
           assignmentsData.push({
             ...existingAssignment,
             student
           });
         } else if (lessonData.assignment?.content?.template) {
+          // יצירת מטלה חדשה לתלמיד
           const createAssignmentPromise = async () => {
             try {
               const assignmentData = {
@@ -113,6 +107,7 @@ const AssignmentsPage = () => {
                   template: lessonData.assignment.content.template,
                   studentContent: ""
                 },
+                // בסטטוס התלמיד תישמר "feedback" כאשר המורה יעדכן ל-"completed" או "revision"
                 status: "pending",
                 teacherStatus: "pending",
                 createdAt: new Date().toISOString(),
@@ -140,7 +135,7 @@ const AssignmentsPage = () => {
               });
 
             } catch (error) {
-              console.error(`שגיאה ביצירת מטלה לתלמיד ${student.fullName}:`, error);
+              console.error(`Error creating assignment for student ${student.fullName}:`, error);
               throw error;
             }
           };
@@ -156,15 +151,24 @@ const AssignmentsPage = () => {
           setShowSuccessAlert(true);
           setTimeout(() => setShowSuccessAlert(false), 3000);
         } catch (error) {
-          console.error("שגיאה ביצירת מטלות:", error);
+          console.error("Error creating assignments:", error);
           setError("שגיאה ביצירת חלק מהמטלות");
         }
       }
 
+      // הוספת מידע צ'אט - אינדיקציה להודעות חדשות מצד המורה
+      for (const assignment of assignmentsData) {
+        const chatRef = doc(db, 'chats', assignment.id);
+        const chatDoc = await getDoc(chatRef);
+        if (chatDoc.exists()) {
+          const chatData = chatDoc.data();
+          assignment.unreadMessages = chatData.unreadCount?.teacher || 0;
+        } else {
+          assignment.unreadMessages = 0;
+        }
+      }
+
       setAssignments(assignmentsData);
-      
-      // הקמת מאזינים בזמן אמת להודעות בצ'אט
-      setupChatListeners(assignmentsData);
 
     } catch (error) {
       console.error("שגיאה בטעינת מטלות:", error);
@@ -172,60 +176,13 @@ const AssignmentsPage = () => {
     }
   };
 
-  const setupChatListeners = (assignmentsData) => {
-    // נקה מאזינים קיימים
-    chatListeners.forEach(unsubscribe => unsubscribe());
-    const newListeners = [];
-
-    assignmentsData.forEach(assignment => {
-      const chatRef = doc(db, 'chats', assignment.id);
-      const unsubscribeChat = onSnapshot(chatRef, (docSnapshot) => {
-        if (docSnapshot.exists()) {
-          const chatData = docSnapshot.data();
-          setAssignments(prevAssignments => 
-            prevAssignments.map(prevAssignment => 
-              prevAssignment.id === assignment.id
-                ? { 
-                    ...prevAssignment, 
-                    unreadMessages: chatData.unreadCount?.teacher || 0 
-                  }
-                : prevAssignment
-            )
-          );
-        }
-      });
-
-      const messagesRef = collection(db, 'chats', assignment.id, 'messages');
-      const messagesQuery = query(messagesRef, where('role', '==', 'student'));
-      const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const message = change.doc.data();
-            const messageTimestamp = new Date(
-              message.timestamp?.toDate ? message.timestamp.toDate() : message.timestamp
-            );
-            const isNewMessage = messageTimestamp > new Date(Date.now() - 3000);
-            console.log("Teacher page - New student message:", message, "isNewMessage:", isNewMessage);
-            if (isNewMessage && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
-              updateDoc(chatRef, {
-                'unreadCount.teacher': increment(1)
-              }).catch(err => console.error("Error updating teacher unread count:", err));
-            }
-          }
-        });
-      });
-
-      newListeners.push(unsubscribeChat, unsubscribeMessages);
-    });
-
-    setChatListeners(newListeners);
-  };
-
   const updateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
       setLoading(true);
       setError(null);
 
+      // המרת סטטוסים מצד המורה לצד התלמיד:
+      // כאשר המורה בוחר "completed" או "revision" – הצד של התלמיד יקבל "feedback"
       let studentStatus = newStatus;
       if (newStatus === "completed" || newStatus === "revision") {
         studentStatus = "feedback";
@@ -239,6 +196,7 @@ const AssignmentsPage = () => {
 
       const assignment = assignments.find(a => a.id === assignmentId);
       
+      // שליחת מייל לתלמיד בהתאם לסטטוס
       if (assignment?.student?.email) {
         let emailSubject = "";
         let emailText = "";
@@ -285,6 +243,7 @@ const AssignmentsPage = () => {
     }
   };
 
+  // עדכון פונקציות סטטוס עבור צד המורה
   const getStatusBadgeClass = (status, teacherStatus) => {
     if (status === 'feedback') {
       return teacherStatus === 'completed'
@@ -299,6 +258,20 @@ const AssignmentsPage = () => {
       "revision": "bg-red-100 text-red-800"
     };
     return `px-2 py-1 rounded-full text-sm font-medium ${classes[status] || classes.pending}`;
+  };
+
+  const getStatusText = (status, teacherStatus) => {
+    if (status === 'feedback') {
+      return teacherStatus === 'completed' ? 'הושלם' : 'נדרש תיקון';
+    }
+    const texts = {
+      "pending": "טרם הוגש",
+      "submitted": "ממתין לבדיקה",
+      "review": "בבדיקה",
+      "completed": "הושלם",
+      "revision": "נדרש תיקון"
+    };
+    return texts[status] || "טרם הוגש";
   };
 
   const sortBy = (key) => {
@@ -331,28 +304,6 @@ const AssignmentsPage = () => {
       }
       return aValue < bValue ? 1 : -1;
     });
-  };
-
-  const handleCloseChatModal = async () => {
-    if (selectedAssignment) {
-      try {
-        const chatRef = doc(db, 'chats', selectedAssignment.id);
-        await updateDoc(chatRef, {
-          'unreadCount.teacher': 0
-        });
-        setAssignments(prevAssignments =>
-          prevAssignments.map(assignment =>
-            assignment.id === selectedAssignment.id
-              ? { ...assignment, unreadMessages: 0 }
-              : assignment
-          )
-        );
-      } catch (error) {
-        console.error("Error resetting unread count:", error);
-      }
-    }
-    setShowChatModal(false);
-    setSelectedAssignment(null);
   };
 
   if (loading) {
@@ -436,19 +387,22 @@ const AssignmentsPage = () => {
                 className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => sortBy('fullName')}
               >
-                שם התלמיד {sortConfig.key === 'fullName' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
+                שם התלמיד 
+                {sortConfig.key === 'fullName' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </th>
               <th 
                 className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => sortBy('email')}
               >
-                אימייל {sortConfig.key === 'email' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
+                אימייל
+                {sortConfig.key === 'email' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </th>
               <th 
                 className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => sortBy('status')}
               >
-                סטטוס {sortConfig.key === 'status' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
+                סטטוס
+                {sortConfig.key === 'status' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 תאריך עדכון
@@ -603,7 +557,10 @@ const AssignmentsPage = () => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold">צ'אט עם {selectedAssignment.student?.fullName}</h3>
               <button
-                onClick={handleCloseChatModal}
+                onClick={() => {
+                  setShowChatModal(false);
+                  setSelectedAssignment(null);
+                }}
                 className="text-gray-500 hover:text-gray-700"
               >
                 ✕
