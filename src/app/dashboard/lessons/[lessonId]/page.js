@@ -30,12 +30,43 @@ const StudentLessonPage = () => {
   const [editHistory, setEditHistory] = useState([]);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [chatUnsubscribe, setChatUnsubscribe] = useState(null); // משתנה לניהול ביטול ההאזנה לצ'אט
+
+  // ניקוי האזנה לצ'אט בעת פירוק הקומפוננטה
+  useEffect(() => {
+    return () => {
+      if (chatUnsubscribe) {
+        chatUnsubscribe();
+      }
+    };
+  }, [chatUnsubscribe]);
 
   useEffect(() => {
     if (lessonId && studentId) {
       fetchLessonAndAssignment();
     }
   }, [lessonId, studentId]);
+
+  // אתחול האזנה לצ'אט
+  const setupChatListener = (assignmentId) => {
+    // ביטול האזנה קודמת אם קיימת
+    if (chatUnsubscribe) {
+      chatUnsubscribe();
+    }
+
+    const chatRef = doc(db, 'chats', assignmentId);
+    const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const chatData = docSnapshot.data();
+        setAssignment(prev => ({
+          ...prev,
+          unreadMessages: chatData.unreadCount?.student || 0
+        }));
+      }
+    });
+
+    setChatUnsubscribe(() => unsubscribe);
+  };
 
   const fetchLessonAndAssignment = async () => {
     try {
@@ -59,21 +90,15 @@ const StudentLessonPage = () => {
       if (!assignmentsSnapshot.empty) {
         const assignmentData = {
           id: assignmentsSnapshot.docs[0].id,
-          ...assignmentsSnapshot.docs[0].data()
+          ...assignmentsSnapshot.docs[0].data(),
+          unreadMessages: 0 // ערך התחלתי
         };
-
-        // קריאת מידע הצ'אט (כמות הודעות לא נקראות)
-        const chatRef = doc(db, 'chats', assignmentData.id);
-        const chatDoc = await getDoc(chatRef);
-        if (chatDoc.exists()) {
-          const chatData = chatDoc.data();
-          assignmentData.unreadMessages = chatData.unreadCount?.student || 0;
-        } else {
-          assignmentData.unreadMessages = 0;
-        }
 
         setAssignment(assignmentData);
         
+        // הגדרת האזנה לצ'אט
+        setupChatListener(assignmentData.id);
+
         setEditHistory([
           { 
             date: assignmentData.createdAt, 
@@ -96,23 +121,6 @@ const StudentLessonPage = () => {
       setLoading(false);
     }
   };
-
-  // האזנה בזמן אמת לשינויים בצ'אט (עדכון unreadMessages)
-  useEffect(() => {
-    if (assignment?.id) {
-      const chatRef = doc(db, 'chats', assignment.id);
-      const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
-        if (docSnapshot.exists()) {
-          const chatData = docSnapshot.data();
-          setAssignment(prev => ({
-            ...prev,
-            unreadMessages: chatData.unreadCount?.student || 0
-          }));
-        }
-      });
-      return () => unsubscribe();
-    }
-  }, [assignment?.id]);
 
   const handleSaveContent = async (newContent) => {
     try {

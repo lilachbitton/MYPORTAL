@@ -9,7 +9,8 @@ import {
   getDoc, 
   updateDoc, 
   query, 
-  where 
+  where,
+  onSnapshot
 } from "firebase/firestore";
 import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
@@ -30,12 +31,44 @@ const AssignmentsPage = () => {
   const [showResponseModal, setShowResponseModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [chatListeners, setChatListeners] = useState({}); // מעקב אחרי האזנות לצ'אט
+
+  // ניקוי האזנות בעת פירוק הקומפוננטה
+  useEffect(() => {
+    return () => {
+      Object.values(chatListeners).forEach(unsubscribe => unsubscribe());
+    };
+  }, [chatListeners]);
 
   useEffect(() => {
     if (lessonId && cycleId) {
       fetchLessonDetails();
     }
   }, [lessonId, cycleId]);
+
+  // פונקציה להאזנה לעדכוני הצ'אט עבור מטלה מסוימת
+  const setupChatListener = (assignmentId) => {
+    if (chatListeners[assignmentId]) return;
+
+    const chatRef = doc(db, 'chats', assignmentId);
+    const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const chatData = docSnapshot.data();
+        setAssignments(prev =>
+          prev.map(assignment =>
+            assignment.id === assignmentId
+              ? { ...assignment, unreadMessages: chatData.unreadCount?.teacher || 0 }
+              : assignment
+          )
+        );
+      }
+    });
+
+    setChatListeners(prev => ({
+      ...prev,
+      [assignmentId]: unsubscribe
+    }));
+  };
 
   const fetchLessonDetails = async () => {
     try {
@@ -68,7 +101,7 @@ const AssignmentsPage = () => {
       );
       const studentsSnapshot = await getDocs(studentsQuery);
 
-      // קבלת כל המטלות הקיימות
+      // קבלת כל המטלות הקיימות לשיעור
       const assignmentsQuery = query(
         collection(db, "assignments"),
         where("lessonId", "==", lessonId)
@@ -78,7 +111,6 @@ const AssignmentsPage = () => {
         assignmentsSnapshot.docs.map(doc => [doc.data().studentId, { id: doc.id, ...doc.data() }])
       );
 
-      // יצירת או עדכון מטלות לכל התלמידים
       const assignmentsData = [];
       const assignmentCreationPromises = [];
 
@@ -87,86 +119,56 @@ const AssignmentsPage = () => {
         const existingAssignment = existingAssignments.get(student.id);
 
         if (existingAssignment) {
-          // אם כבר קיימת מטלה לתלמיד
+          // אם קיימת מטלה לתלמיד, נוסיף אותה
           assignmentsData.push({
             ...existingAssignment,
-            student
+            student,
+            unreadMessages: 0 // ערך התחלתי
           });
         } else if (lessonData.assignment?.content?.template) {
           // יצירת מטלה חדשה לתלמיד
-          const createAssignmentPromise = async () => {
-            try {
-              const assignmentData = {
-                lessonId,
-                cycleId,
-                studentId: student.id,
-                title: lessonData.assignment.title || "",
-                description: lessonData.assignment.description || "",
-                dueDate: lessonData.assignment.dueDate || "",
-                content: {
-                  template: lessonData.assignment.content.template,
-                  studentContent: ""
-                },
-                // בסטטוס התלמיד תישמר "feedback" כאשר המורה יעדכן ל-"completed" או "revision"
-                status: "pending",
-                teacherStatus: "pending",
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              };
-
-              const newAssignmentRef = await addDoc(collection(db, "assignments"), assignmentData);
-
-              // שליחת מייל לתלמיד
-              await fetch("/api/sendEmail", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  to: student.email,
-                  subject: "מטלה חדשה זמינה",
-                  text: `שלום ${student.fullName},\n\nמטלה חדשה בשיעור "${lessonData.title}" זמינה עבורך.\nאנא היכנס/י לפורטל לצפייה במטלה.\n\nבהצלחה!`,
-                  username: student.email
-                }),
-              });
-
-              assignmentsData.push({
-                id: newAssignmentRef.id,
-                ...assignmentData,
-                student
-              });
-
-            } catch (error) {
-              console.error(`Error creating assignment for student ${student.fullName}:`, error);
-              throw error;
-            }
+          const assignmentData = {
+            lessonId,
+            cycleId,
+            studentId: student.id,
+            title: lessonData.assignment.title || "",
+            description: lessonData.assignment.description || "",
+            dueDate: lessonData.assignment.dueDate || "",
+            content: {
+              template: lessonData.assignment.content.template,
+              studentContent: ""
+            },
+            status: "pending",
+            teacherStatus: "pending",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            unreadMessages: 0
           };
 
-          assignmentCreationPromises.push(createAssignmentPromise());
+          assignmentCreationPromises.push(async () => {
+            const newAssignmentRef = await addDoc(collection(db, "assignments"), assignmentData);
+            assignmentsData.push({
+              id: newAssignmentRef.id,
+              ...assignmentData,
+              student
+            });
+            return newAssignmentRef.id;
+          });
         }
       }
 
+      // יצירת מטלות חדשות במידה ויש
       if (assignmentCreationPromises.length > 0) {
-        try {
-          await Promise.all(assignmentCreationPromises);
-          setSuccessMessage(`נוצרו ${assignmentCreationPromises.length} מטלות חדשות`);
-          setShowSuccessAlert(true);
-          setTimeout(() => setShowSuccessAlert(false), 3000);
-        } catch (error) {
-          console.error("Error creating assignments:", error);
-          setError("שגיאה ביצירת חלק מהמטלות");
-        }
+        await Promise.all(assignmentCreationPromises.map(promise => promise()));
+        setSuccessMessage(`נוצרו ${assignmentCreationPromises.length} מטלות חדשות`);
+        setShowSuccessAlert(true);
+        setTimeout(() => setShowSuccessAlert(false), 3000);
       }
 
-      // הוספת מידע צ'אט - אינדיקציה להודעות חדשות מצד המורה
-      for (const assignment of assignmentsData) {
-        const chatRef = doc(db, 'chats', assignment.id);
-        const chatDoc = await getDoc(chatRef);
-        if (chatDoc.exists()) {
-          const chatData = chatDoc.data();
-          assignment.unreadMessages = chatData.unreadCount?.teacher || 0;
-        } else {
-          assignment.unreadMessages = 0;
-        }
-      }
+      // הגדרת האזנה לצ'אט עבור כל מטלה
+      assignmentsData.forEach(assignment => {
+        setupChatListener(assignment.id);
+      });
 
       setAssignments(assignmentsData);
 
@@ -181,8 +183,7 @@ const AssignmentsPage = () => {
       setLoading(true);
       setError(null);
 
-      // המרת סטטוסים מצד המורה לצד התלמיד:
-      // כאשר המורה בוחר "completed" או "revision" – הצד של התלמיד יקבל "feedback"
+      // המרת סטטוס מצד המורה לצד התלמיד במידת הצורך
       let studentStatus = newStatus;
       if (newStatus === "completed" || newStatus === "revision") {
         studentStatus = "feedback";
@@ -195,8 +196,8 @@ const AssignmentsPage = () => {
       });
 
       const assignment = assignments.find(a => a.id === assignmentId);
-      
-      // שליחת מייל לתלמיד בהתאם לסטטוס
+
+      // שליחת מייל לתלמיד בהתאם לסטטוס החדש
       if (assignment?.student?.email) {
         let emailSubject = "";
         let emailText = "";
@@ -213,6 +214,8 @@ const AssignmentsPage = () => {
           case "review":
             emailSubject = "המטלה שלך התקבלה ונמצאת בבדיקה";
             emailText = `שלום ${assignment.student.fullName},\n\nהמטלה שהגשת בשיעור "${lesson?.title}" התקבלה ונמצאת בבדיקה.\nניצור איתך קשר בהקדם.`;
+            break;
+          default:
             break;
         }
 
@@ -243,7 +246,6 @@ const AssignmentsPage = () => {
     }
   };
 
-  // עדכון פונקציות סטטוס עבור צד המורה
   const getStatusBadgeClass = (status, teacherStatus) => {
     if (status === 'feedback') {
       return teacherStatus === 'completed'

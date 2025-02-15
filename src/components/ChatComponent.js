@@ -2,17 +2,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '@/firebase/config';
 import { 
-  collection, 
   doc, 
   getDoc, 
-  setDoc,
   updateDoc,
   onSnapshot,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-  arrayUnion 
+  arrayUnion,
+  setDoc,
+  serverTimestamp
 } from "firebase/firestore";
 
 const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
@@ -30,45 +26,34 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
     const initializeChat = async () => {
       try {
         setLoading(true);
-        // בדיקה אם קיים צ'אט למשימה זו
         const chatRef = doc(db, "chats", assignmentId);
         const chatDoc = await getDoc(chatRef);
 
+        // אם הצ'אט לא קיים - יוצרים אותו
         if (!chatDoc.exists()) {
-          // יצירת צ'אט חדש
-          const assignmentRef = doc(db, "assignments", assignmentId);
-          const assignmentDoc = await getDoc(assignmentRef);
-          const assignmentData = assignmentDoc.data();
-
           await setDoc(chatRef, {
             assignmentId,
             messages: [],
-            participants: {
-              teacherId: assignmentData.teacherId || "admin", // כרגע ברירת מחדל עד שנוסיף teacherId
-              studentId: assignmentData.studentId
-            },
-            lastMessage: null,
             unreadCount: {
               teacher: 0,
               student: 0
             },
+            lastMessage: null,
             createdAt: serverTimestamp()
           });
         }
 
-        // האזנה לשינויים בצ'אט
-        const unsubscribe = onSnapshot(chatRef, (doc) => {
-          if (doc.exists()) {
-            const data = doc.data();
+        // מאפסים את מונה ההודעות הלא נקראות למשתמש הנוכחי
+        await updateDoc(chatRef, {
+          [`unreadCount.${userRole}`]: 0
+        });
+
+        // מתחילים להאזין לשינויים
+        const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            const data = docSnapshot.data();
             setMessages(data.messages || []);
             scrollToBottom();
-
-            // עדכון הודעות כנקראו
-            if (data.messages?.length > 0) {
-              updateDoc(chatRef, {
-                [`unreadCount.${userRole}`]: 0
-              });
-            }
           }
         });
 
@@ -76,7 +61,7 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
         return () => unsubscribe();
 
       } catch (error) {
-        console.error("Error initializing chat:", error);
+        console.error("שגיאה באתחול הצ'אט:", error);
         setError("שגיאה בטעינת הצ'אט");
         setLoading(false);
       }
@@ -94,8 +79,12 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
     try {
       const chatRef = doc(db, "chats", assignmentId);
       const chatDoc = await getDoc(chatRef);
+      
+      if (!chatDoc.exists()) {
+        throw new Error("הצ'אט לא נמצא");
+      }
+      
       const chatData = chatDoc.data();
-
       const message = {
         content: newMessage.trim(),
         senderId: currentUserId,
@@ -104,6 +93,7 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
         isRead: false
       };
 
+      // מעדכנים את ההודעה החדשה ומגדילים את מונה ההודעות הלא נקראות
       await updateDoc(chatRef, {
         messages: arrayUnion(message),
         lastMessage: {
@@ -119,7 +109,7 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole }) => {
       scrollToBottom();
 
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("שגיאה בשליחת ההודעה:", error);
       setError("שגיאה בשליחת ההודעה");
     }
   };
