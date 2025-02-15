@@ -21,7 +21,6 @@ const AssignmentsPage = () => {
   const params = useParams();
   const { cycleId, lessonId } = params;
   
-  // הגדרות state
   const [lesson, setLesson] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,7 +39,6 @@ const AssignmentsPage = () => {
       fetchLessonDetails();
     }
     return () => {
-      // נקה מאזינים
       chatListeners.forEach(unsubscribe => unsubscribe());
       setChatListeners([]);
     };
@@ -69,7 +67,6 @@ const AssignmentsPage = () => {
 
   const fetchAssignments = async (lessonData) => {
     try {
-      // קבלת כל התלמידים הפעילים במחזור
       const studentsQuery = query(
         collection(db, "users"),
         where("cycle", "==", cycleId),
@@ -77,7 +74,6 @@ const AssignmentsPage = () => {
       );
       const studentsSnapshot = await getDocs(studentsQuery);
 
-      // קבלת המטלות הקיימות
       const assignmentsQuery = query(
         collection(db, "assignments"),
         where("lessonId", "==", lessonId)
@@ -87,7 +83,6 @@ const AssignmentsPage = () => {
         assignmentsSnapshot.docs.map(doc => [doc.data().studentId, { id: doc.id, ...doc.data() }])
       );
 
-      // יצירה או עדכון מטלות לכל תלמיד
       const assignmentsData = [];
       const assignmentCreationPromises = [];
       for (const studentDoc of studentsSnapshot.docs) {
@@ -121,7 +116,6 @@ const AssignmentsPage = () => {
 
               const newAssignmentRef = await addDoc(collection(db, "assignments"), assignmentData);
 
-              // שליחת מייל לתלמיד
               await fetch("/api/sendEmail", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -163,7 +157,7 @@ const AssignmentsPage = () => {
 
       setAssignments(assignmentsData);
       
-      // הקמת מאזינים בזמן אמת להודעות בצ'אט
+      // מאזין לעדכוני unreadCount במסמכי הצ׳אט
       setupChatListeners(assignmentsData);
 
     } catch (error) {
@@ -173,7 +167,6 @@ const AssignmentsPage = () => {
   };
 
   const setupChatListeners = (assignmentsData) => {
-    // נקה מאזינים קיימים
     chatListeners.forEach(unsubscribe => unsubscribe());
     const newListeners = [];
 
@@ -192,30 +185,10 @@ const AssignmentsPage = () => {
                 : prevAssignment
             )
           );
+          console.log("Teacher page unreadCount updated for assignment", assignment.id, chatData.unreadCount?.teacher);
         }
       });
-
-      const messagesRef = collection(db, 'chats', assignment.id, 'messages');
-      const messagesQuery = query(messagesRef, where('role', '==', 'student'));
-      const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const message = change.doc.data();
-            const messageTimestamp = new Date(
-              message.timestamp?.toDate ? message.timestamp.toDate() : message.timestamp
-            );
-            const isNewMessage = messageTimestamp > new Date(Date.now() - 3000);
-            console.log("Teacher page - New student message:", message, "isNewMessage:", isNewMessage);
-            if (isNewMessage && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
-              updateDoc(chatRef, {
-                'unreadCount.teacher': increment(1)
-              }).catch(err => console.error("Error updating teacher unread count:", err));
-            }
-          }
-        });
-      });
-
-      newListeners.push(unsubscribeChat, unsubscribeMessages);
+      newListeners.push(unsubscribeChat);
     });
 
     setChatListeners(newListeners);
@@ -596,7 +569,7 @@ const AssignmentsPage = () => {
         </div>
       )}
 
-      {/* מודל הצ'אט */}
+      {/* מודל הצ׳אט */}
       {showChatModal && selectedAssignment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-2xl mx-4">
