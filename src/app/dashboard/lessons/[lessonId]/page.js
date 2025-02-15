@@ -31,7 +31,6 @@ const StudentLessonPage = () => {
   const [editHistory, setEditHistory] = useState([]);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
-  const [chatListener, setChatListener] = useState(null);
 
   useEffect(() => {
     if (lessonId && studentId) {
@@ -99,12 +98,11 @@ const StudentLessonPage = () => {
     }
   };
 
-  // האזנה בזמן אמת לשינויים בצ'אט
+  // מאזינים בזמן אמת לעדכוני הצ'אט
   useEffect(() => {
     if (assignment?.id) {
-      // האזנה למסמך הראשי של הצ'אט
       const chatRef = doc(db, 'chats', assignment.id);
-      const unsubscribe = onSnapshot(chatRef, (docSnapshot) => {
+      const unsubscribeChat = onSnapshot(chatRef, (docSnapshot) => {
         if (docSnapshot.exists()) {
           const chatData = docSnapshot.data();
           setAssignment(prev => ({
@@ -114,35 +112,35 @@ const StudentLessonPage = () => {
         }
       });
 
-      // האזנה להודעות חדשות
       const messagesRef = collection(db, 'chats', assignment.id, 'messages');
       const messagesQuery = query(messagesRef, where('role', '==', 'teacher'));
-      const messagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const message = change.doc.data();
-            const isNewMessage = new Date(message.timestamp?.toDate() || message.timestamp) > 
-              new Date(Date.now() - 1000);
-            
+            const messageTimestamp = new Date(
+              message.timestamp?.toDate ? message.timestamp.toDate() : message.timestamp
+            );
+            const isNewMessage = messageTimestamp > new Date(Date.now() - 3000);
+            console.log("Student page - New teacher message:", message, "isNewMessage:", isNewMessage);
             if (isNewMessage && !showChatModal) {
-              // עדכון המונה בחלון הראשי של הצ'אט
-              const chatRef = doc(db, 'chats', assignment.id);
+              // עדכון המונה במצב ה-UI
+              setAssignment(prev => ({
+                ...prev,
+                unreadMessages: (prev.unreadMessages || 0) + 1
+              }));
+              // עדכון במסד הנתונים
               updateDoc(chatRef, {
                 'unreadCount.student': increment(1)
-              });
+              }).catch(err => console.error("Error updating unread count:", err));
             }
           }
         });
       });
 
-      setChatListener(() => () => {
-        unsubscribe();
-        messagesUnsubscribe();
-      });
-
       return () => {
-        unsubscribe();
-        messagesUnsubscribe();
+        unsubscribeChat();
+        unsubscribeMessages();
       };
     }
   }, [assignment?.id, showChatModal]);
@@ -225,7 +223,6 @@ const StudentLessonPage = () => {
         await updateDoc(chatRef, {
           'unreadCount.student': 0
         });
-        
         setAssignment(prev => ({
           ...prev,
           unreadMessages: 0
@@ -237,6 +234,7 @@ const StudentLessonPage = () => {
     setShowChatModal(false);
   };
 
+  // פונקציות עזר להצגת סטטוס, תאריכים ועוד (ניתן לשנות לפי הצורך)
   const getStatusColor = (status, teacherStatus) => {
     if (status === 'feedback') {
       return teacherStatus === 'completed' 

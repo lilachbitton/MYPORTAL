@@ -21,7 +21,7 @@ const AssignmentsPage = () => {
   const params = useParams();
   const { cycleId, lessonId } = params;
   
-  // State definitions
+  // הגדרות state
   const [lesson, setLesson] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,13 +40,13 @@ const AssignmentsPage = () => {
       fetchLessonDetails();
     }
     return () => {
-      if (chatListeners.length > 0) {
-        chatListeners.forEach(unsubscribe => unsubscribe());
-        setChatListeners([]);
-      }
+      // נקה מאזינים
+      chatListeners.forEach(unsubscribe => unsubscribe());
+      setChatListeners([]);
     };
   }, [lessonId, cycleId]);
-const fetchLessonDetails = async () => {
+
+  const fetchLessonDetails = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -69,7 +69,7 @@ const fetchLessonDetails = async () => {
 
   const fetchAssignments = async (lessonData) => {
     try {
-      // קבלת כל התלמידים במחזור
+      // קבלת כל התלמידים הפעילים במחזור
       const studentsQuery = query(
         collection(db, "users"),
         where("cycle", "==", cycleId),
@@ -77,7 +77,7 @@ const fetchLessonDetails = async () => {
       );
       const studentsSnapshot = await getDocs(studentsQuery);
 
-      // קבלת כל המטלות הקיימות
+      // קבלת המטלות הקיימות
       const assignmentsQuery = query(
         collection(db, "assignments"),
         where("lessonId", "==", lessonId)
@@ -87,10 +87,10 @@ const fetchLessonDetails = async () => {
         assignmentsSnapshot.docs.map(doc => [doc.data().studentId, { id: doc.id, ...doc.data() }])
       );
 
-      // יצירת או עדכון מטלות לכל תלמיד
+      // יצירה או עדכון מטלות לכל תלמיד
       const assignmentsData = [];
       const assignmentCreationPromises = [];
-for (const studentDoc of studentsSnapshot.docs) {
+      for (const studentDoc of studentsSnapshot.docs) {
         const student = { id: studentDoc.id, ...studentDoc.data() };
         const existingAssignment = existingAssignments.get(student.id);
 
@@ -163,7 +163,7 @@ for (const studentDoc of studentsSnapshot.docs) {
 
       setAssignments(assignmentsData);
       
-      // הקמת מאזינים בזמן אמת לשינויים בהודעות
+      // הקמת מאזינים בזמן אמת להודעות בצ'אט
       setupChatListeners(assignmentsData);
 
     } catch (error) {
@@ -171,14 +171,15 @@ for (const studentDoc of studentsSnapshot.docs) {
       setError("שגיאה בטעינת מטלות התלמידים");
     }
   };
-const setupChatListeners = (assignmentsData) => {
+
+  const setupChatListeners = (assignmentsData) => {
+    // נקה מאזינים קיימים
     chatListeners.forEach(unsubscribe => unsubscribe());
     const newListeners = [];
 
     assignmentsData.forEach(assignment => {
-      // האזנה לשינויים במסמך הראשי של הצ'אט
       const chatRef = doc(db, 'chats', assignment.id);
-      const chatUnsubscribe = onSnapshot(chatRef, (docSnapshot) => {
+      const unsubscribeChat = onSnapshot(chatRef, (docSnapshot) => {
         if (docSnapshot.exists()) {
           const chatData = docSnapshot.data();
           setAssignments(prevAssignments => 
@@ -194,28 +195,27 @@ const setupChatListeners = (assignmentsData) => {
         }
       });
 
-      // האזנה להודעות חדשות
       const messagesRef = collection(db, 'chats', assignment.id, 'messages');
       const messagesQuery = query(messagesRef, where('role', '==', 'student'));
-      const messagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const message = change.doc.data();
-            const isNewMessage = new Date(message.timestamp?.toDate() || message.timestamp) > 
-              new Date(Date.now() - 1000);
-            
+            const messageTimestamp = new Date(
+              message.timestamp?.toDate ? message.timestamp.toDate() : message.timestamp
+            );
+            const isNewMessage = messageTimestamp > new Date(Date.now() - 3000);
+            console.log("Teacher page - New student message:", message, "isNewMessage:", isNewMessage);
             if (isNewMessage && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
-              // עדכון המונה בחלון הראשי של הצ'אט
-              const chatRef = doc(db, 'chats', assignment.id);
               updateDoc(chatRef, {
                 'unreadCount.teacher': increment(1)
-              });
+              }).catch(err => console.error("Error updating teacher unread count:", err));
             }
           }
         });
       });
 
-      newListeners.push(chatUnsubscribe, messagesUnsubscribe);
+      newListeners.push(unsubscribeChat, unsubscribeMessages);
     });
 
     setChatListeners(newListeners);
@@ -284,7 +284,8 @@ const setupChatListeners = (assignmentsData) => {
       setLoading(false);
     }
   };
-const getStatusBadgeClass = (status, teacherStatus) => {
+
+  const getStatusBadgeClass = (status, teacherStatus) => {
     if (status === 'feedback') {
       return teacherStatus === 'completed'
         ? 'px-2 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800'
@@ -339,7 +340,6 @@ const getStatusBadgeClass = (status, teacherStatus) => {
         await updateDoc(chatRef, {
           'unreadCount.teacher': 0
         });
-        
         setAssignments(prevAssignments =>
           prevAssignments.map(assignment =>
             assignment.id === selectedAssignment.id
@@ -354,7 +354,8 @@ const getStatusBadgeClass = (status, teacherStatus) => {
     setShowChatModal(false);
     setSelectedAssignment(null);
   };
-if (loading) {
+
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
@@ -595,7 +596,7 @@ if (loading) {
         </div>
       )}
 
-     {/* מודל הצ'אט */}
+      {/* מודל הצ'אט */}
       {showChatModal && selectedAssignment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-2xl mx-4">
