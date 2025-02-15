@@ -183,38 +183,67 @@ const AssignmentsPage = () => {
     }
   };
 
+  // פונקציית setupChatListeners החדשה
   const setupChatListeners = (assignmentsData) => {
     // ניקוי מאזינים קיימים
     chatListeners.forEach(unsubscribe => unsubscribe());
     const newListeners = [];
 
     assignmentsData.forEach(assignment => {
+      // מאזין למסמך הצ'אט הראשי לקבלת הסטטוס הכללי
+      const chatDocRef = doc(db, 'chats', assignment.id);
+      const chatDocUnsubscribe = onSnapshot(chatDocRef, (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const chatData = docSnapshot.data();
+          if (!selectedAssignment || selectedAssignment.id !== assignment.id) {
+            setAssignments(prevAssignments => 
+              prevAssignments.map(prevAssignment => 
+                prevAssignment.id === assignment.id
+                  ? { 
+                      ...prevAssignment, 
+                      unreadMessages: chatData.unreadCount?.teacher || 0
+                    }
+                  : prevAssignment
+              )
+            );
+          }
+        }
+      });
+
       // מאזין לקולקציית ההודעות של הצ'אט
       const messagesRef = collection(db, 'chats', assignment.id, 'messages');
-      const unsubscribe = onSnapshot(messagesRef, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const message = change.doc.data();
-            // במידה וההודעה נשלחה מהתלמיד ואנחנו לא נמצאים כרגע בצ'אט עם המטלה הזו
-            if (message.role === 'student' && (!selectedAssignment || selectedAssignment.id !== assignment.id)) {
-              setAssignments(prevAssignments => 
-                prevAssignments.map(prevAssignment => 
-                  prevAssignment.id === assignment.id
-                    ? { 
-                        ...prevAssignment, 
-                        unreadMessages: (prevAssignment.unreadMessages || 0) + 1 
-                      }
-                    : prevAssignment
-                )
-              );
-            }
+      const messagesUnsubscribe = onSnapshot(messagesRef, (snapshot) => {
+        // בדיקת כל ההודעות החדשות
+        let unreadCount = 0;
+        snapshot.forEach((doc) => {
+          const message = doc.data();
+          if (message.role === 'student' && (!message.readBy?.teacher)) {
+            unreadCount++;
           }
         });
+
+        // עדכון מונה ההודעות שלא נקראו
+        if (!selectedAssignment || selectedAssignment.id !== assignment.id) {
+          setAssignments(prevAssignments => 
+            prevAssignments.map(prevAssignment => 
+              prevAssignment.id === assignment.id
+                ? { ...prevAssignment, unreadMessages: unreadCount }
+                : prevAssignment
+            )
+          );
+
+          // עדכון המסמך הראשי של הצ'אט
+          updateDoc(chatDocRef, {
+            'unreadCount.teacher': unreadCount
+          }).catch(error => {
+            console.error("Error updating unread count:", error);
+          });
+        }
       }, (error) => {
         console.error("Error in chat listener:", error);
       });
 
-      newListeners.push(unsubscribe);
+      newListeners.push(chatDocUnsubscribe, messagesUnsubscribe);
     });
 
     setChatListeners(newListeners);
