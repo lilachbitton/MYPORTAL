@@ -32,11 +32,11 @@ const AssignmentFeedback = ({
     let text = selection.toString().trim();
     
     if (text) {
-      // שמירה על ירידות שורה אבל הסרת רווחים מיותרים
+      // שמירה על ירידות שורה אך הסרת רווחים מיותרים
       text = text
         .split('\n')
         .map(line => line.trim())
-        .filter(line => line) // הסרת שורות ריקות
+        .filter(line => line)
         .join('\n');
       
       if (text) {
@@ -48,7 +48,7 @@ const AssignmentFeedback = ({
         let x = rect.x + window.scrollX;
         let y = rect.y + rect.height + window.scrollY;
         
-        // התאמת מיקום החלונית אם היא תחרוג מגבולות המסך
+        // התאמת מיקום החלונית במידה והיא חורגת מגבולות המסך
         if (y + 200 > containerRect.bottom) {
           y = rect.y - 220 + window.scrollY;
         }
@@ -119,7 +119,7 @@ const AssignmentFeedback = ({
 
   const editFeedback = (id) => {
     const feedback = specificFeedbacks.find(f => f.id === id) || 
-                    activeFeedbacks.find(f => f.id === id);
+                     activeFeedbacks.find(f => f.id === id);
     if (feedback) {
       setEditingFeedback(feedback);
       setSelectedText(feedback.text);
@@ -155,32 +155,37 @@ const AssignmentFeedback = ({
     );
     
     sortedFeedbacks.forEach(feedback => {
-      // יצירת ביטוי רגולרי שמתאים גם לירידות שורה
+      // מחליף את התוכן בדיוק כמו שהוא, כולל ירידות שורה
       const escapedText = feedback.text
-        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // escape special characters
-        .replace(/\n/g, '[\\s\\n]*'); // allow any whitespace or newline between lines
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // המרה לאותיות מיוחדות
+        .split('\n')                           // פיצול לשורות
+        .map(line => line.trim())              // הסרת רווחים מיותרים
+        .join('\\n?\\s*');                     // חיבור מחדש עם תמיכה בירידות שורה וברווחים
       
-      const regex = new RegExp(escapedText, 'g');
-      
-      content = content.replace(regex, match => `
-        <mark class="bg-yellow-100 group relative cursor-pointer">
-          ${match}
-          <span class="absolute hidden group-hover:block bg-white border p-2 rounded shadow-lg z-10 -top-2 right-full max-w-xs">
-            ${feedback.comment}
-            ${!readOnly 
-              ? `<div class="flex justify-end gap-2 mt-2">
-                  <button data-action="remove" data-id="${feedback.id}" class="text-red-500 hover:text-red-700 px-2 py-1">
-                    מחק
-                  </button>
-                  <button data-action="edit" data-id="${feedback.id}" class="text-blue-500 hover:text-blue-700 px-2 py-1">
-                    ערוך
-                  </button>
-                </div>`
-              : ''
-            }
-          </span>
-        </mark>
-      `);
+      try {
+        const regex = new RegExp(escapedText, 'gm');  // שימוש בדגל 'm' למצב multiline
+        content = content.replace(regex, match => `
+          <mark class="bg-yellow-100 group relative cursor-pointer whitespace-pre-wrap">
+            ${match}
+            <span class="absolute hidden group-hover:block bg-white border p-2 rounded shadow-lg z-10 -top-2 right-full max-w-xs">
+              ${feedback.comment}
+              ${!readOnly 
+                ? `<div class="flex justify-end gap-2 mt-2">
+                    <button data-action="remove" data-id="${feedback.id}" class="text-red-500 hover:text-red-700 px-2 py-1">
+                      מחק
+                    </button>
+                    <button data-action="edit" data-id="${feedback.id}" class="text-blue-500 hover:text-blue-700 px-2 py-1">
+                      ערוך
+                    </button>
+                  </div>`
+                : ''
+              }
+            </span>
+          </mark>
+        `);
+      } catch (error) {
+        console.error('Error replacing text:', error);
+      }
     });
     
     return content;
