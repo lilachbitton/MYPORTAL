@@ -11,12 +11,8 @@ const AssignmentFeedback = ({
   const [commentText, setCommentText] = useState('');
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [activeFeedbacks, setActiveFeedbacks] = useState(
-    feedbacks.filter(f => f.isGeneral)
-  );
-  const [specificFeedbacks, setSpecificFeedbacks] = useState(
-    feedbacks.filter(f => !f.isGeneral)
-  );
+  const [activeFeedbacks, setActiveFeedbacks] = useState(feedbacks.filter(f => f.isGeneral));
+  const [specificFeedbacks, setSpecificFeedbacks] = useState(feedbacks.filter(f => !f.isGeneral));
   const [showGeneralCommentInput, setShowGeneralCommentInput] = useState(false);
   const [editingFeedback, setEditingFeedback] = useState(null);
 
@@ -29,179 +25,172 @@ const AssignmentFeedback = ({
     if (readOnly) return;
     
     const selection = window.getSelection();
-    let text = selection.toString().trim();
+    const text = selection.toString().trim();
     
     if (text) {
-      // שמירה על ירידות שורה אך הסרת רווחים מיותרים
-      text = text
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line)
-        .join('\n');
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
       
-      if (text) {
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        const container = document.querySelector('.feedback-container');
-        const containerRect = container.getBoundingClientRect();
-        
-        let x = rect.x + window.scrollX;
-        let y = rect.y + rect.height + window.scrollY;
-        
-        // התאמת מיקום החלונית במידה והיא חורגת מגבולות המסך
-        if (y + 200 > containerRect.bottom) {
-          y = rect.y - 220 + window.scrollY;
-        }
-        
-        setSelectedText(text);
-        setPosition({ x, y });
-        setShowCommentInput(true);
-      }
+      setSelectedText(text);
+      setPosition({
+        x: rect.x + window.scrollX,
+        y: rect.y + rect.height + window.scrollY
+      });
+      setShowCommentInput(true);
     }
   };
 
   const handleSaveComment = (isGeneral = false) => {
     if (!commentText.trim()) return;
+    if (!isGeneral && !selectedText.trim()) return;
 
     if (editingFeedback) {
+      const updatedFeedback = {
+        ...editingFeedback,
+        comment: commentText.trim(),
+        timestamp: new Date().toISOString()
+      };
+
       if (editingFeedback.isGeneral) {
-        const updatedFeedbacks = activeFeedbacks.map(f =>
-          f.id === editingFeedback.id
-            ? { ...f, comment: commentText, timestamp: new Date().toISOString() }
-            : f
-        );
-        setActiveFeedbacks(updatedFeedbacks);
-        onSaveFeedback([...updatedFeedbacks, ...specificFeedbacks]);
+        setActiveFeedbacks(prev => prev.map(f => 
+          f.id === editingFeedback.id ? updatedFeedback : f
+        ));
       } else {
-        const updatedFeedbacks = specificFeedbacks.map(f =>
-          f.id === editingFeedback.id
-            ? { ...f, comment: commentText, timestamp: new Date().toISOString() }
-            : f
-        );
-        setSpecificFeedbacks(updatedFeedbacks);
-        onSaveFeedback([...activeFeedbacks, ...updatedFeedbacks]);
+        setSpecificFeedbacks(prev => prev.map(f => 
+          f.id === editingFeedback.id ? updatedFeedback : f
+        ));
       }
-      setEditingFeedback(null);
     } else {
       const newFeedback = {
         id: Date.now(),
         text: isGeneral ? '' : selectedText,
-        comment: commentText,
-        position: isGeneral ? null : position,
+        comment: commentText.trim(),
         timestamp: new Date().toISOString(),
-        isGeneral
+        isGeneral,
+        position: isGeneral ? null : position
       };
 
       if (isGeneral) {
-        const updatedGeneral = [...activeFeedbacks, newFeedback];
-        setActiveFeedbacks(updatedGeneral);
-        onSaveFeedback([...updatedGeneral, ...specificFeedbacks]);
+        setActiveFeedbacks(prev => [...prev, newFeedback]);
       } else {
-        const updatedSpecific = [...specificFeedbacks, newFeedback];
-        setSpecificFeedbacks(updatedSpecific);
-        onSaveFeedback([...activeFeedbacks, ...updatedSpecific]);
+        setSpecificFeedbacks(prev => [...prev, newFeedback]);
       }
     }
 
+    // עדכון כל ההערות בפיירבייס
+    const allFeedbacks = [
+      ...activeFeedbacks,
+      ...specificFeedbacks,
+      ...(editingFeedback ? [] : [{ 
+        id: Date.now(),
+        text: isGeneral ? '' : selectedText,
+        comment: commentText.trim(),
+        timestamp: new Date().toISOString(),
+        isGeneral,
+        position: isGeneral ? null : position
+      }])
+    ];
+
+    onSaveFeedback(allFeedbacks);
+
+    // איפוס
     setCommentText('');
+    setSelectedText('');
     setShowCommentInput(false);
     setShowGeneralCommentInput(false);
-    setSelectedText('');
+    setEditingFeedback(null);
   };
 
   const removeFeedback = (id) => {
-    const updatedGeneral = activeFeedbacks.filter(f => f.id !== id);
-    const updatedSpecific = specificFeedbacks.filter(f => f.id !== id);
-    setActiveFeedbacks(updatedGeneral);
-    setSpecificFeedbacks(updatedSpecific);
-    onSaveFeedback([...updatedGeneral, ...updatedSpecific]);
-  };
-
-  const editFeedback = (id) => {
-    const feedback = specificFeedbacks.find(f => f.id === id) || 
-                     activeFeedbacks.find(f => f.id === id);
-    if (feedback) {
-      setEditingFeedback(feedback);
-      setSelectedText(feedback.text);
-      setCommentText(feedback.comment);
-      if (!feedback.isGeneral) {
-        setPosition(feedback.position);
-        setShowCommentInput(true);
-      } else {
-        setShowGeneralCommentInput(true);
-      }
+    if (specificFeedbacks.find(f => f.id === id)) {
+      setSpecificFeedbacks(prev => prev.filter(f => f.id !== id));
+    } else {
+      setActiveFeedbacks(prev => prev.filter(f => f.id !== id));
     }
+    
+    onSaveFeedback([
+      ...activeFeedbacks.filter(f => f.id !== id),
+      ...specificFeedbacks.filter(f => f.id !== id)
+    ]);
   };
 
   const handleContentClick = (e) => {
-    const target = e.target;
-    if (target.tagName === 'BUTTON') {
-      const action = target.getAttribute('data-action');
-      const id = Number(target.getAttribute('data-id'));
+    const target = e.target.closest('button');
+    if (target) {
+      const action = target.dataset.action;
+      const id = parseInt(target.dataset.id);
       if (action === 'remove') {
         removeFeedback(id);
       } else if (action === 'edit') {
-        editFeedback(id);
+        const feedback = specificFeedbacks.find(f => f.id === id) || 
+                        activeFeedbacks.find(f => f.id === id);
+        if (feedback) {
+          setEditingFeedback(feedback);
+          setCommentText(feedback.comment);
+          if (feedback.isGeneral) {
+            setShowGeneralCommentInput(true);
+          } else {
+            setSelectedText(feedback.text);
+            setPosition(feedback.position);
+            setShowCommentInput(true);
+          }
+        }
       }
     }
   };
 
   const renderContent = () => {
     let content = studentContent;
-    
-    // מיון ההערות מהארוכה לקצרה כדי למנוע החלפות חלקיות
-    const sortedFeedbacks = [...specificFeedbacks].sort(
-      (a, b) => b.text.length - a.text.length
-    );
-    
+    const sortedFeedbacks = [...specificFeedbacks].sort((a, b) => b.text.length - a.text.length);
+
     sortedFeedbacks.forEach(feedback => {
-      // מחליף את התוכן בדיוק כמו שהוא, כולל ירידות שורה
-      const escapedText = feedback.text
-        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // המרה לאותיות מיוחדות
-        .split('\n')                           // פיצול לשורות
-        .map(line => line.trim())              // הסרת רווחים מיותרים
-        .join('\\n?\\s*');                     // חיבור מחדש עם תמיכה בירידות שורה וברווחים
-      
-      try {
-        const regex = new RegExp(escapedText, 'gm');  // שימוש בדגל 'm' למצב multiline
-        content = content.replace(regex, match => `
-          <mark class="bg-yellow-100 group relative cursor-pointer whitespace-pre-wrap">
-            ${match}
-            <span class="absolute hidden group-hover:block bg-white border p-2 rounded shadow-lg z-10 -top-2 right-full max-w-xs">
-              ${feedback.comment}
-              ${!readOnly 
-                ? `<div class="flex justify-end gap-2 mt-2">
-                    <button data-action="remove" data-id="${feedback.id}" class="text-red-500 hover:text-red-700 px-2 py-1">
-                      מחק
-                    </button>
-                    <button data-action="edit" data-id="${feedback.id}" class="text-blue-500 hover:text-blue-700 px-2 py-1">
-                      ערוך
-                    </button>
-                  </div>`
-                : ''
-              }
-            </span>
-          </mark>
-        `);
-      } catch (error) {
-        console.error('Error replacing text:', error);
-      }
+      const markerHtml = `
+        <span class="bg-yellow-100 group relative inline-block">
+          ${feedback.text}
+          <div class="opacity-0 group-hover:opacity-100 absolute left-full top-0 ml-2 p-3 bg-white rounded shadow-lg border z-50 w-64 transition-opacity duration-200">
+            <p class="text-sm">${feedback.comment}</p>
+            ${!readOnly ? `
+              <div class="flex justify-end gap-2 mt-2 pt-2 border-t">
+                <button 
+                  data-action="edit"
+                  data-id="${feedback.id}"
+                  class="text-xs px-2 py-1 text-blue-600 hover:text-blue-800"
+                >
+                  ערוך
+                </button>
+                <button 
+                  data-action="remove"
+                  data-id="${feedback.id}"
+                  class="text-xs px-2 py-1 text-red-600 hover:text-red-800"
+                >
+                  מחק
+                </button>
+              </div>
+            ` : ''}
+          </div>
+        </span>
+      `;
+
+      // החלפת הטקסט המקורי בגרסה המסומנת
+      const escapedText = feedback.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapedText, 'g');
+      content = content.replace(regex, markerHtml);
     });
-    
+
     return content;
   };
 
   return (
     <div className="feedback-container relative bg-white p-6 rounded-lg shadow-sm">
-      {/* Student Content with Highlights */}
+      {/* תוכן התלמיד עם הערות */}
       <div 
-        className="prose max-w-none"
+        className="prose max-w-none whitespace-pre-wrap break-words"
         onClick={handleContentClick}
         onMouseUp={handleTextSelection}
         dangerouslySetInnerHTML={{ __html: renderContent() }}
       />
 
-      {/* Comment Input Modal */}
+      {/* חלון הוספת הערה */}
       {showCommentInput && (
         <div
           className="fixed bg-white shadow-lg rounded-lg p-4 z-50"
@@ -239,7 +228,7 @@ const AssignmentFeedback = ({
         </div>
       )}
 
-      {/* General Comment Modal */}
+      {/* חלון הערה כללית */}
       {showGeneralCommentInput && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-96 max-w-[90vw]">
@@ -273,7 +262,7 @@ const AssignmentFeedback = ({
         </div>
       )}
 
-      {/* General Feedbacks List */}
+      {/* רשימת הערות כלליות */}
       {activeFeedbacks.length > 0 && (
         <div className="mt-6 bg-gray-50 p-4 rounded-lg">
           <h3 className="font-bold mb-3">הערות כלליות:</h3>
@@ -288,7 +277,11 @@ const AssignmentFeedback = ({
                   {!readOnly && (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => editFeedback(feedback.id)}
+                        onClick={() => {
+                          setEditingFeedback(feedback);
+                          setCommentText(feedback.comment);
+                          setShowGeneralCommentInput(true);
+                        }}
                         className="text-blue-500 hover:text-blue-700"
                       >
                         ערוך
@@ -311,7 +304,7 @@ const AssignmentFeedback = ({
         </div>
       )}
 
-      {/* Action Buttons */}
+      {/* כפתורי פעולה */}
       {!readOnly && (
         <div className="mt-6 flex justify-end gap-4">
           <button
