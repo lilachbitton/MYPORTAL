@@ -32,16 +32,31 @@ const AssignmentFeedback = ({
     let text = selection.toString().trim();
     
     if (text) {
-      text = text.replace(/\s+/g, ' ');
-      const range = selection.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
+      // שמירה על ירידות שורה אבל הסרת רווחים מיותרים
+      text = text
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line) // הסרת שורות ריקות
+        .join('\n');
       
-      setSelectedText(text);
-      setPosition({
-        x: rect.x + window.scrollX,
-        y: rect.y + rect.height + window.scrollY
-      });
-      setShowCommentInput(true);
+      if (text) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        const container = document.querySelector('.feedback-container');
+        const containerRect = container.getBoundingClientRect();
+        
+        let x = rect.x + window.scrollX;
+        let y = rect.y + rect.height + window.scrollY;
+        
+        // התאמת מיקום החלונית אם היא תחרוג מגבולות המסך
+        if (y + 200 > containerRect.bottom) {
+          y = rect.y - 220 + window.scrollY;
+        }
+        
+        setSelectedText(text);
+        setPosition({ x, y });
+        setShowCommentInput(true);
+      }
     }
   };
 
@@ -103,13 +118,18 @@ const AssignmentFeedback = ({
   };
 
   const editFeedback = (id) => {
-    const feedback = specificFeedbacks.find(f => f.id === id);
+    const feedback = specificFeedbacks.find(f => f.id === id) || 
+                    activeFeedbacks.find(f => f.id === id);
     if (feedback) {
       setEditingFeedback(feedback);
       setSelectedText(feedback.text);
       setCommentText(feedback.comment);
-      setPosition(feedback.position);
-      setShowCommentInput(true);
+      if (!feedback.isGeneral) {
+        setPosition(feedback.position);
+        setShowCommentInput(true);
+      } else {
+        setShowGeneralCommentInput(true);
+      }
     }
   };
 
@@ -128,25 +148,41 @@ const AssignmentFeedback = ({
 
   const renderContent = () => {
     let content = studentContent;
-    specificFeedbacks.forEach(feedback => {
-      content = content.replace(feedback.text, 
-        `<mark class="bg-yellow-100 group relative cursor-pointer">
-          ${feedback.text}
-          <span class="absolute hidden group-hover:block bg-white border p-2 rounded shadow-lg z-10 -top-2 right-full">
+    
+    // מיון ההערות מהארוכה לקצרה כדי למנוע החלפות חלקיות
+    const sortedFeedbacks = [...specificFeedbacks].sort(
+      (a, b) => b.text.length - a.text.length
+    );
+    
+    sortedFeedbacks.forEach(feedback => {
+      // יצירת ביטוי רגולרי שמתאים גם לירידות שורה
+      const escapedText = feedback.text
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // escape special characters
+        .replace(/\n/g, '[\\s\\n]*'); // allow any whitespace or newline between lines
+      
+      const regex = new RegExp(escapedText, 'g');
+      
+      content = content.replace(regex, match => `
+        <mark class="bg-yellow-100 group relative cursor-pointer">
+          ${match}
+          <span class="absolute hidden group-hover:block bg-white border p-2 rounded shadow-lg z-10 -top-2 right-full max-w-xs">
             ${feedback.comment}
             ${!readOnly 
-              ? `<button data-action="remove" data-id="${feedback.id}" class="text-red-500 hover:text-red-700 ml-2">
-                   מחק
-                 </button>
-                 <button data-action="edit" data-id="${feedback.id}" class="text-blue-500 hover:text-blue-700 ml-2">
-                   ערוך
-                 </button>`
+              ? `<div class="flex justify-end gap-2 mt-2">
+                  <button data-action="remove" data-id="${feedback.id}" class="text-red-500 hover:text-red-700 px-2 py-1">
+                    מחק
+                  </button>
+                  <button data-action="edit" data-id="${feedback.id}" class="text-blue-500 hover:text-blue-700 px-2 py-1">
+                    ערוך
+                  </button>
+                </div>`
               : ''
             }
           </span>
-        </mark>`
-      );
+        </mark>
+      `);
     });
+    
     return content;
   };
 
@@ -215,6 +251,7 @@ const AssignmentFeedback = ({
                 onClick={() => {
                   setShowGeneralCommentInput(false);
                   setCommentText('');
+                  setEditingFeedback(null);
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
               >
@@ -224,7 +261,7 @@ const AssignmentFeedback = ({
                 onClick={() => handleSaveComment(true)}
                 className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
               >
-                שמור
+                {editingFeedback ? 'עדכן' : 'שמור'}
               </button>
             </div>
           </div>
@@ -244,12 +281,20 @@ const AssignmentFeedback = ({
                 <div className="flex justify-between items-start">
                   <p className="text-gray-800">{feedback.comment}</p>
                   {!readOnly && (
-                    <button
-                      onClick={() => removeFeedback(feedback.id)}
-                      className="text-red-500 hover:text-red-700 ml-2"
-                    >
-                      ✕
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => editFeedback(feedback.id)}
+                        className="text-blue-500 hover:text-blue-700"
+                      >
+                        ערוך
+                      </button>
+                      <button
+                        onClick={() => removeFeedback(feedback.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        מחק
+                      </button>
+                    </div>
                   )}
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
