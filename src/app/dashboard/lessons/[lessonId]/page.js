@@ -14,6 +14,7 @@ import {
 import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
 import ChatComponent from '@/components/ChatComponent';
+import AssignmentFeedback from '@/components/AssignmentFeedback'; // יבוא הקומפוננטה בראש הקובץ
 
 const StudentLessonPage = () => {
   const params = useParams();
@@ -381,17 +382,26 @@ const StudentLessonPage = () => {
             </div>
 
             <div dir="rtl" style={{ direction: 'rtl' }}>
-              <SimpleEditor
-                content={assignment.content?.studentContent || assignment.content?.template || ''}
-                onChange={handleSaveContent}
-                readOnly={!canEdit}
-                style={{
-                  direction: 'rtl',
-                  textAlign: 'right',
-                  minHeight: '300px',
-                }}
-                className="bg-gray-50 rounded-xl p-6 shadow-inner"
-              />
+              {isSubmitted ? (
+                <AssignmentFeedback
+                  originalContent={assignment.content?.template || ''}
+                  studentContent={assignment.content?.studentContent || ''}
+                  feedbacks={assignment.feedbacks || []}
+                  readOnly={true}  // התלמיד רק יכול לצפות בהערות
+                />
+              ) : (
+                <SimpleEditor
+                  content={assignment.content?.studentContent || assignment.content?.template || ''}
+                  onChange={handleSaveContent}
+                  readOnly={!canEdit}
+                  style={{
+                    direction: 'rtl',
+                    textAlign: 'right',
+                    minHeight: '300px',
+                  }}
+                  className="bg-gray-50 rounded-xl p-6 shadow-inner"
+                />
+              )}
             </div>
 
             <div className="mt-8 flex justify-center">

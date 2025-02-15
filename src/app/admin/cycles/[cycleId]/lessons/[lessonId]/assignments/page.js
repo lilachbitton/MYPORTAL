@@ -15,6 +15,7 @@ import {
 import { db } from '@/firebase/config';
 import SimpleEditor from '@/components/SimpleEditor';
 import ChatComponent from '@/components/ChatComponent';
+import AssignmentFeedback from '@/components/AssignmentFeedback';
 
 const AssignmentsPage = () => {
   const params = useParams();
@@ -487,7 +488,7 @@ const AssignmentsPage = () => {
         </div>
       )}
 
-      {/* מודל להצגת תשובת התלמיד */}
+      {/* מודל להצגת תשובת התלמיד עם ההערות */}
       {showResponseModal && selectedAssignment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -507,46 +508,26 @@ const AssignmentsPage = () => {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <h3 className="font-bold mb-2">המשימה המקורית:</h3>
-                <div className="bg-gray-50 p-4 rounded border max-h-60 overflow-y-auto">
-                  <SimpleEditor
-                    content={selectedAssignment.content.template}
-                    readOnly={true}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-bold mb-2">תשובת התלמיד:</h3>
-                <div className="bg-white p-4 rounded border">
-                  <SimpleEditor
-                    content={selectedAssignment.content.studentContent}
-                    readOnly={true}
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center mt-4">
-                <div>
-                  <span className="text-sm text-gray-500">
-                    עודכן: {new Date(selectedAssignment.updatedAt).toLocaleDateString('he-IL')}
-                  </span>
-                </div>
-                <div className="space-x-2">
-                  <select
-                    value={selectedAssignment.teacherStatus || selectedAssignment.status}
-                    onChange={(e) => updateAssignmentStatus(selectedAssignment.id, e.target.value)}
-                    className={`${getStatusBadgeClass(selectedAssignment.status, selectedAssignment.teacherStatus)} border-0 cursor-pointer`}
-                  >
-                    <option value="pending">טרם הוגש</option>
-                    <option value="submitted">ממתין לבדיקה</option>
-                    <option value="review">בבדיקה</option>
-                    <option value="completed">הושלם</option>
-                    <option value="revision">נדרש תיקון</option>
-                  </select>
-                </div>
-              </div>
+              <AssignmentFeedback
+                originalContent={selectedAssignment.content.template}
+                studentContent={selectedAssignment.content.studentContent}
+                feedbacks={selectedAssignment.feedbacks || []}
+                onSaveFeedback={async (updatedFeedbacks) => {
+                  try {
+                    await updateDoc(doc(db, "assignments", selectedAssignment.id), {
+                      feedbacks: updatedFeedbacks,
+                      updatedAt: new Date().toISOString()
+                    });
+                    
+                    setSuccessMessage('ההערות נשמרו בהצלחה');
+                    setShowSuccessAlert(true);
+                    setTimeout(() => setShowSuccessAlert(false), 3000);
+                  } catch (error) {
+                    console.error("שגיאה בשמירת ההערות:", error);
+                    setError('שגיאה בשמירת ההערות');
+                  }
+                }}
+              />
             </div>
           </div>
         </div>
