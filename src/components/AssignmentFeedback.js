@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Card } from '@/components/ui/card';
 
 const AssignmentFeedback = ({ 
   originalContent, 
@@ -68,23 +67,23 @@ const AssignmentFeedback = ({
   return (
     <div className="relative">
       {/* Original Assignment Template */}
-      <Card className="p-4 mb-4 bg-gray-50">
+      <div className="p-4 mb-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
         <h3 className="font-bold mb-2">תבנית המשימה המקורית:</h3>
         <div 
           className="prose max-w-none"
           dangerouslySetInnerHTML={{ __html: originalContent }}
         />
-      </Card>
+      </div>
 
       {/* Student's Response */}
-      <Card className="p-4 bg-white">
+      <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
         <h3 className="font-bold mb-2">תשובת התלמיד:</h3>
         <div
           className="prose max-w-none relative"
           onMouseUp={handleTextSelection}
           dangerouslySetInnerHTML={{ __html: studentContent }}
         />
-      </Card>
+      </div>
 
       {/* Feedback Overlay */}
       {activeFeedbacks.map((feedback, index) => (
