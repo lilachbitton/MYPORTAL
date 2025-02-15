@@ -527,6 +527,7 @@ const AssignmentsPage = () => {
                     setError('שגיאה בשמירת ההערות');
                   }
                 }}
+                onUpdateStatus={(newStatus) => updateAssignmentStatus(selectedAssignment.id, newStatus)}
               />
             </div>
           </div>
