@@ -38,7 +38,6 @@ const ChatComponent = ({ assignmentId, currentUserId, userRole, teacherName = "�
         const chatDoc = await getDoc(chatRef);
 
         if (!chatDoc.exists()) {
-          // יצירת צ'אט חדש אם לא קיים
           const assignmentRef = doc(db, "assignments", assignmentId);
           const assignmentDoc = await getDoc(assignmentRef);
           const assignmentData = assignmentDoc.data();

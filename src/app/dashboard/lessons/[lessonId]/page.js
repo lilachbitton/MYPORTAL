@@ -32,7 +32,6 @@ const StudentLessonPage = () => {
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
 
-  // טוען את פרטי השיעור והמטלה
   useEffect(() => {
     if (lessonId && studentId) {
       fetchLessonAndAssignment();
@@ -64,7 +63,7 @@ const StudentLessonPage = () => {
           ...assignmentsSnapshot.docs[0].data()
         };
 
-        // קריאת ספירת הודעות לא נקראות מתוך מסמך הצ׳אט
+        // קריאת ספירת הודעות לא נקראות מתוך מסמך הצ'אט
         const chatRef = doc(db, 'chats', assignmentData.id);
         const chatDoc = await getDoc(chatRef);
         if (chatDoc.exists()) {
@@ -99,7 +98,7 @@ const StudentLessonPage = () => {
     }
   };
 
-  // מאזין לעדכון השדה unreadCount במסמך הצ׳אט
+  // מאזין לעדכון השדה unreadCount במסמך הצ'אט
   useEffect(() => {
     if (assignment?.id) {
       const chatRef = doc(db, 'chats', assignment.id);
@@ -243,10 +242,136 @@ const StudentLessonPage = () => {
       )}
 
       <div className="max-w-5xl mx-auto space-y-8">
-        {/* כאן מוצגים פרטי השיעור, החומרים וכו' – (לא שינינו את החלק הזה) */}
-        {/* ... */}
-        
-        {/* מודל הצ׳אט */}
+        {/* פרטי השיעור */}
+        <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4 border-b pb-4 border-orange-500 text-center">
+            {lesson.title}
+          </h1>
+          <p className="text-gray-600 text-center">
+            {new Date(lesson.date).toLocaleDateString('he-IL')}
+          </p>
+        </div>
+
+        {/* הקלטת השיעור */}
+        {lesson.zoomLink && (
+          <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
+            <h2 className="text-2xl font-semibold mb-6 text-right border-b pb-4 border-orange-500">
+              הקלטת השיעור
+            </h2>
+            <div className="aspect-w-16 aspect-h-9 rounded-xl overflow-hidden">
+              <iframe
+                src={lesson.zoomLink?.includes('vimeo') 
+                  ? `${lesson.zoomLink}?autoplay=0&title=0&byline=0&portrait=0` 
+                  : lesson.zoomLink?.includes('youtu') 
+                    ? `https://www.youtube.com/embed/${lesson.zoomLink.split('v=')[1]}`
+                    : lesson.zoomLink}
+                className="w-full h-96 rounded-xl"
+                allow="autoplay; fullscreen; picture-in-picture"
+                allowFullScreen
+                frameBorder="0"
+                title="שיעור מוקלט"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* מצגת השיעור */}
+        {lesson.presentationLink && (
+          <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
+            <h2 className="text-2xl font-semibold mb-6 text-right border-b pb-4 border-orange-500">
+              מצגת השיעור
+            </h2>
+            <div className="flex justify-center">
+              <a
+                href={lesson.presentationLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1"
+              >
+                צפה במצגת
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* חומרי עזר */}
+        {lesson.materials?.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 p-8">
+            <h2 className="text-2xl font-semibold mb-6 text-right border-b pb-4 border-orange-500">
+              חומרי עזר
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {lesson.materials.map((material, index) => (
+                <a
+                  key={index}
+                  href={material.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group block p-6 bg-gray-50 rounded-xl hover:bg-orange-50 transition-all duration-300 text-right shadow hover:shadow-md transform hover:-translate-y-1"
+                >
+                  <span className="text-lg font-medium text-gray-900 group-hover:text-orange-600">
+                    {material.title}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* מודל אישור הגשה */}
+        {showSubmitModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full mx-4">
+              <h3 className="text-xl font-bold mb-4">אישור הגשת מטלה</h3>
+              <p className="mb-6 text-gray-600">
+                האם אתה בטוח שברצונך להגיש את המטלה? לאחר ההגשה לא ניתן יהיה לערוך את התוכן.
+              </p>
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => setShowSubmitModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  ביטול
+                </button>
+                <button
+                  onClick={handleSubmitAssignment}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                >
+                  {isAfterFeedback ? 'אישור הגשה חוזרת' : 'אישור הגשה'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* מודל היסטוריית שינויים */}
+        {historyModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full mx-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">היסטוריית שינויים</h3>
+                <button
+                  onClick={() => setHistoryModalOpen(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {editHistory.map((entry, index) => (
+                  <div key={index} className="border-b pb-2">
+                    <p className="font-medium">{entry.status}</p>
+                    <p className="text-sm text-gray-500">
+                      {new Date(entry.date).toLocaleString('he-IL')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* מודל הצ'אט */}
         {showChatModal && assignment && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-2xl mx-4">
@@ -269,7 +394,7 @@ const StudentLessonPage = () => {
         )}
       </div>
 
-      {/* כפתור צ׳אט צף */}
+      {/* כפתור צ'אט צף */}
       {assignment && (
         <button
           onClick={() => setShowChatModal(true)}
